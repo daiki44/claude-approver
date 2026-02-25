@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.claude.approver</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/daiki.sekiguchi/.claude/claude-approver/ClaudeApprover.app/Contents/MacOS/ClaudeApprover</string>
+    </array>
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/daiki.sekiguchi/Library/Logs/ClaudeApprover/stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/daiki.sekiguchi/Library/Logs/ClaudeApprover/stderr.log</string>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>
