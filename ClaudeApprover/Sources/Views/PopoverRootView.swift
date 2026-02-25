@@ -3,6 +3,10 @@ import SwiftUI
 struct PopoverRootView: View {
     let viewModel: ApproverViewModel
 
+    private var hasContent: Bool {
+        !viewModel.queue.isEmpty || !viewModel.completions.isEmpty
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -33,10 +37,10 @@ struct PopoverRootView: View {
             Divider()
 
             // Content
-            if viewModel.queue.isEmpty {
-                EmptyStateView()
-            } else {
+            if hasContent {
                 RequestListView(viewModel: viewModel)
+            } else {
+                EmptyStateView()
             }
         }
         .frame(width: 380, height: 480)

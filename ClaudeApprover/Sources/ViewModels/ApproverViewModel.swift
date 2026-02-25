@@ -15,6 +15,9 @@ final class ApproverViewModel {
     /// Tracks toolUseIds of approved requests for completion notifications
     private var approvedToolUseIds: Set<String> = []
 
+    /// Recently completed tools (shown in UI)
+    private(set) var completions: [CompletionInfo] = []
+
     func start() async {
         notificationService.requestAuthorization()
 
@@ -172,8 +175,45 @@ final class ApproverViewModel {
             return
         }
 
-        debugLog("  showing completion notification")
+        debugLog("  showing completion in UI")
+        completions.append(info)
         notificationService.notifyCompletion(info: info)
+
+        // Show popover for completion
+        if let delegate = AppDelegate.shared {
+            delegate.showPopover()
+            delegate.bounceButton()
+        }
+    }
+
+    /// Dismiss a completion item from the UI
+    func dismissCompletion(id: UUID) {
+        completions.removeAll { $0.id == id }
+        updateAppDelegate()
+    }
+
+    /// Go to terminal and dismiss the completion
+    func goToTerminal(completionId: UUID) {
+        completions.removeAll { $0.id == completionId }
+        activateTerminal()
+        updateAppDelegate()
+    }
+
+    private func activateTerminal() {
+        let terminalBundleIds = [
+            "com.mitchellh.ghostty",
+            "com.googlecode.iterm2",
+            "net.kovidgoyal.kitty",
+            "dev.warp.Warp-Stable",
+            "com.apple.Terminal",
+        ]
+        let workspace = NSWorkspace.shared
+        for bundleId in terminalBundleIds {
+            if let app = workspace.runningApplications.first(where: { $0.bundleIdentifier == bundleId }) {
+                app.activate()
+                return
+            }
+        }
     }
 
     // MARK: - Badge
@@ -181,6 +221,11 @@ final class ApproverViewModel {
     private func updateAppDelegate() {
         guard let delegate = AppDelegate.shared else { return }
         delegate.updateBadge(count: queue.count)
+
+        // Auto-close popover when both queues are empty
+        if queue.isEmpty && completions.isEmpty {
+            delegate.closePopover()
+        }
     }
 
     // MARK: - Debug Logging

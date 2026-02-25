@@ -22,12 +22,6 @@ enum PlanApprovalMode: Int, CaseIterable {
         }
     }
 
-    /// Edit tool permissions granted by auto-accept modes
-    static let editPermissions: [[String: Any]] = [
-        ["tool": "Edit"],
-        ["tool": "Write"],
-        ["tool": "NotebookEdit"],
-    ]
 }
 
 /// Extended response from the Approver UI back to the hook.
@@ -54,23 +48,12 @@ struct DecisionResponse: Sendable {
     }
 
     /// Build a plan approval response based on the selected mode.
-    /// Note: context clearing (option 1 vs 2) cannot be controlled via hooks —
-    /// both auto-accept modes send the same response with updatedPermissions.
+    /// ExitPlanMode does not support updatedPermissions — the hook input has
+    /// no permission_suggestions key, and Claude Code ignores unknown fields.
+    /// All approval modes send a plain "allow" response; auto-accept behavior
+    /// is controlled by Claude Code's internal logic, not by hook responses.
     static func allowPlan(mode: PlanApprovalMode) -> DecisionResponse {
-        switch mode {
-        case .clearContextAutoAccept, .autoAcceptEdits:
-            return DecisionResponse(
-                behavior: "allow",
-                message: nil,
-                updatedPermissions: PlanApprovalMode.editPermissions
-            )
-        case .manualApprove:
-            return DecisionResponse(
-                behavior: "allow",
-                message: nil,
-                updatedPermissions: nil
-            )
-        }
+        .allow
     }
 
     func toJSON() -> [String: Any] {
