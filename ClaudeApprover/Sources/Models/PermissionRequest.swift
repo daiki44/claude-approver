@@ -148,6 +148,49 @@ struct PermissionRequest: Identifiable, Equatable, Sendable {
         return .low
     }
 
+    // MARK: - Edit Tool Properties
+
+    /// Whether this is an Edit tool request
+    var isEditTool: Bool { toolName == "Edit" }
+
+    /// Whether this is a Write tool request
+    var isWriteTool: Bool { toolName == "Write" }
+
+    /// File path for Edit/Write operations
+    var editFilePath: String? {
+        toolInput["file_path"] as? String
+    }
+
+    /// Short file name for display
+    var editFileName: String? {
+        guard let path = editFilePath else { return nil }
+        return (path as NSString).lastPathComponent
+    }
+
+    /// Old string being replaced (Edit tool)
+    var editOldString: String? {
+        guard isEditTool else { return nil }
+        return toolInput["old_string"] as? String
+    }
+
+    /// New string to replace with (Edit tool)
+    var editNewString: String? {
+        guard isEditTool else { return nil }
+        return toolInput["new_string"] as? String
+    }
+
+    /// Whether replace_all is enabled (Edit tool)
+    var editReplaceAll: Bool {
+        guard isEditTool else { return false }
+        return toolInput["replace_all"] as? Bool ?? false
+    }
+
+    /// Content being written (Write tool)
+    var writeContent: String? {
+        guard isWriteTool else { return nil }
+        return toolInput["content"] as? String
+    }
+
     /// Shortened path with ~ for home directory
     var displayPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path

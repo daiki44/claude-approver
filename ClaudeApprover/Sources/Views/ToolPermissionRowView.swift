@@ -38,15 +38,21 @@ struct ToolPermissionRowView: View {
                 Spacer()
             }
 
-            // Command / input
-            Text(request.displayCommand)
-                .font(.system(.caption, design: .monospaced))
-                .lineLimit(5)
-                .foregroundStyle(.primary)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.textBackgroundColor).opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+            // Command / input — specialized for Edit and Write tools
+            if request.isEditTool {
+                EditDiffView(request: request)
+            } else if request.isWriteTool {
+                WriteContentView(request: request)
+            } else {
+                Text(request.displayCommand)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(5)
+                    .foregroundStyle(.primary)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.textBackgroundColor).opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
 
             // Trust options disclosure section (only if suggestions available)
             if !request.permissionSuggestions.isEmpty {
