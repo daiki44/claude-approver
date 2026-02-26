@@ -33,11 +33,11 @@ actor SocketServer {
 
     func start() throws {
         guard !isRunning else {
-            print("[SocketServer] Already running, skipping start")
+            debugLog("Already running, skipping start")
             return
         }
 
-        print("[SocketServer] Starting... socketPath=\(socketPath)")
+        debugLog("Starting... socketPath=\(socketPath)")
 
         // Ensure directory exists
         let dir = (socketPath as NSString).deletingLastPathComponent
@@ -46,10 +46,16 @@ actor SocketServer {
             withIntermediateDirectories: true
         )
 
+        // Restrict socket directory access to current user only
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: dir
+        )
+
         // Remove stale socket file
         if FileManager.default.fileExists(atPath: socketPath) {
             try FileManager.default.removeItem(atPath: socketPath)
-            print("[SocketServer] Removed stale socket")
+            debugLog("Removed stale socket")
         }
 
         // Create socket
@@ -85,7 +91,7 @@ actor SocketServer {
         }
 
         isRunning = true
-        print("[SocketServer] Listening on \(socketPath)")
+        debugLog("Listening on \(socketPath)")
 
         // Start accept loop on GCD (NOT on actor executor)
         let fd = serverFD
@@ -121,7 +127,10 @@ actor SocketServer {
 
     /// Called by ViewModel when user taps Allow/Deny
     func resolve(requestId: UUID, decision: DecisionResponse) {
-        guard let continuation = pendingHandlers.removeValue(forKey: requestId) else { return }
+        guard let continuation = pendingHandlers.removeValue(forKey: requestId) else {
+            debugLog("WARNING: resolve() continuation not found for \(requestId)")
+            return
+        }
         continuation.resume(returning: decision)
     }
 
@@ -129,6 +138,8 @@ actor SocketServer {
     func cancelAndNotify(_ id: UUID) {
         if let cont = pendingHandlers.removeValue(forKey: id) {
             cont.resume(returning: .deny)
+        } else {
+            debugLog("WARNING: cancelAndNotify() continuation not found for \(id)")
         }
         onCancel?(id)
     }
@@ -199,7 +210,10 @@ actor SocketServer {
         var decision: DecisionResponse = .deny
         var cancelled = false
 
-        // Notify UI and wait for user decision
+        // Store continuation FIRST, then notify UI.
+        // This guarantees pendingHandlers[requestId] exists before the user
+        // can see and interact with the request, preventing the race condition
+        // where resolve() runs before storeContinuation() completes.
         Task { [weak self] in
             guard let self else {
                 semaphore.signal()
@@ -207,10 +221,12 @@ actor SocketServer {
             }
 
             let callback = await self.getOnRequest()
-            callback?(request)
 
             let result = await withCheckedContinuation { (continuation: CheckedContinuation<DecisionResponse, Never>) in
-                Task { await self.storeContinuation(requestId, continuation) }
+                Task {
+                    await self.storeContinuation(requestId, continuation)
+                    callback?(request)
+                }
             }
             decision = result
             semaphore.signal()
@@ -295,6 +311,25 @@ actor SocketServer {
         let ackHeader = Data(bytes: &ackLen, count: 4)
         _ = ackHeader.withUnsafeBytes { Darwin.send(fd, $0.baseAddress!, 4, 0) }
         _ = ackData.withUnsafeBytes { Darwin.send(fd, $0.baseAddress!, ackData.count, 0) }
+    }
+
+    // MARK: - Debug Logging
+
+    nonisolated private func debugLog(_ message: String) {
+        let logPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/approver_debug.log")
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(timestamp)] [SocketServer] \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: logPath.path) {
+            if let handle = try? FileHandle(forWritingTo: logPath) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+            }
+        } else {
+            try? data.write(to: logPath)
+        }
     }
 
     // MARK: - I/O Helpers

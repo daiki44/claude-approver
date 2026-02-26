@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key>
     <string>ClaudeApprover</string>
     <key>CFBundleIdentifier</key>
-    <string>com.claude.approver</string>
+    <string>io.github.daiki44.claude-approver</string>
     <key>CFBundleName</key>
     <string>ClaudeApprover</string>
     <key>CFBundlePackageType</key>

@@ -1,5 +1,7 @@
 # Swift build artifacts
 ClaudeApprover/.build/
+.swiftpm/
+DerivedData/
 
 # Built app bundle
 ClaudeApprover.app/
@@ -10,3 +12,19 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# Editor / IDE
+*.xcodeproj/
+*.xcworkspace/
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Environment and secrets
+*.env
+.env*
+
+# Logs
+*.log

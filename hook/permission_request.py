@@ -14,6 +14,7 @@ Exit codes:
 """
 
 import json
+import os
 import socket
 import struct
 import sys
@@ -31,6 +32,8 @@ LOG_PATH = Path.home() / ".claude" / "approver_debug.log"
 
 
 def _debug_log(msg: str):
+    if not os.environ.get("CLAUDE_APPROVER_DEBUG"):
+        return
     try:
         with open(LOG_PATH, "a") as f:
             f.write(f"[{datetime.now().isoformat()}] {msg}\n")
@@ -72,8 +75,8 @@ def _send_request(request: dict) -> dict | None:
         # App not running or socket gone
         return None
     except socket.timeout:
-        # Timeout -> deny (safe side)
-        return {"decision": "deny"}
+        # Timeout -> passthrough (fail-open: let terminal handle it)
+        return None
     finally:
         try:
             sock.close()
@@ -103,7 +106,9 @@ def main():
         cwd = hook_input.get("cwd", "")
 
         tool_use_id = hook_input.get("tool_use_id", "")
+        permission_suggestions_raw = hook_input.get("permission_suggestions", [])
         _debug_log(f"PermissionRequest: tool={tool_name} tool_use_id={tool_use_id} input_keys={list(tool_input.keys())} hook_keys={list(hook_input.keys())}")
+        _debug_log(f"  permission_suggestions={json.dumps(permission_suggestions_raw, default=str)}")
 
         # PermissionRequest only fires when Claude Code is about to show
         # a permission dialog — no need to check allow/deny lists.

@@ -76,12 +76,11 @@ ClaudeApprover/
 hook/
   permission_request.py   # PermissionRequest hook (timeout 300s)
   post_tool_use.py        # PostToolUse hook (fire-and-forget, 5s timeout)
-  permission_matcher.py   # settings.json allow/deny pattern matching
 scripts/
   register_hook.py        # Add hooks to ~/.claude/settings.json
   unregister_hook.py      # Remove hooks
   Info.plist
-  com.claude.approver.plist  # LaunchAgent
+  launchagent.plist.template  # LaunchAgent (template)
 Makefile
 ```
 

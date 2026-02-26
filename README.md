@@ -1,5 +1,7 @@
 # ClaudeApprover
 
+> **Disclaimer:** This is an unofficial, community-built tool. It is not affiliated with, endorsed by, or sponsored by Anthropic, PBC. "Claude" is a trademark of Anthropic, PBC.
+
 A macOS menu bar app that replaces Claude Code's terminal permission dialogs with a native SwiftUI popover. Instead of switching to your terminal every time Claude Code needs approval, you get a clean GUI right from the menu bar.
 
 ## How It Works
@@ -104,13 +106,11 @@ ClaudeApprover/
 hook/
   permission_request.py            # PermissionRequest hook (stdin → UDS → stdout)
   post_tool_use.py                 # PostToolUse hook (fire-and-forget)
-  permission_matcher.py            # settings.json allow/deny pattern matching
-
 scripts/
   register_hook.py                 # Add hooks to ~/.claude/settings.json
   unregister_hook.py               # Remove hooks
   Info.plist                       # App bundle metadata
-  com.claude.approver.plist        # LaunchAgent definition
+  launchagent.plist.template       # LaunchAgent template (paths filled at install)
 ```
 
 ## Socket Protocol
@@ -170,6 +170,11 @@ Communication uses a Unix Domain Socket at:
 | Hook + ViewModel debug | `~/.claude/approver_debug.log` |
 | LaunchAgent stdout | `~/Library/Logs/ClaudeApprover/stdout.log` |
 | LaunchAgent stderr | `~/Library/Logs/ClaudeApprover/stderr.log` |
+
+**Enable verbose hook logging:**
+```bash
+export CLAUDE_APPROVER_DEBUG=1
+```
 
 ### Common Issues
 

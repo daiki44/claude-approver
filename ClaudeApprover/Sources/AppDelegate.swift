@@ -73,6 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Whether the popover is currently visible
+    var isPopoverShown: Bool {
+        popover?.isShown ?? false
+    }
+
     /// Close the popover and remove event monitors
     func closePopover() {
         popover.performClose(nil)

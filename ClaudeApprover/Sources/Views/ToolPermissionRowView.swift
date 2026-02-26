@@ -68,8 +68,7 @@ struct ToolPermissionRowView: View {
                 if !request.permissionSuggestions.isEmpty {
                     Menu {
                         ForEach(Array(request.permissionSuggestions.enumerated()), id: \.offset) { _, suggestion in
-                            let tool = suggestion["tool"] as? String ?? request.toolName
-                            Button("Always allow \(tool)") {
+                            Button(Self.labelForSuggestion(suggestion, defaultTool: request.toolName)) {
                                 onAlwaysAllow([suggestion])
                             }
                         }
@@ -114,5 +113,45 @@ struct ToolPermissionRowView: View {
                 .stroke(riskColor.opacity(0.4), lineWidth: 1.5)
         )
         .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+    }
+
+    // MARK: - Suggestion Label
+
+    /// Generate a human-readable label from a permission suggestion.
+    /// Maps structured suggestion types to descriptive text matching
+    /// Claude Code's terminal UI choices.
+    private static func labelForSuggestion(_ suggestion: [String: Any], defaultTool: String) -> String {
+        // Check for explicit prompt/label from Claude Code
+        if let prompt = suggestion["prompt"] as? String { return prompt }
+        if let label = suggestion["label"] as? String { return label }
+
+        let type = suggestion["type"] as? String
+        let tool = suggestion["tool"] as? String ?? defaultTool
+        let destination = suggestion["destination"] as? String
+        let scope = destination == "session" ? " (session)" : ""
+
+        switch type {
+        case "setMode":
+            let mode = suggestion["mode"] as? String ?? ""
+            switch mode {
+            case "acceptEdits": return "Auto-accept edits\(scope)"
+            default: return "Set mode: \(mode)\(scope)"
+            }
+        case "addDirectories":
+            if let dirs = suggestion["directories"] as? [String], let first = dirs.first {
+                return "Allow \(tool) in \(shortenPath(first))"
+            }
+            return "Allow \(tool) in project"
+        default:
+            return "Always allow \(tool)"
+        }
+    }
+
+    private static func shortenPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return (path as NSString).lastPathComponent
     }
 }

@@ -195,7 +195,17 @@ final class ApproverViewModel {
     /// Go to terminal and dismiss the completion
     func goToTerminal(completionId: UUID) {
         completions.removeAll { $0.id == completionId }
-        activateTerminal()
+
+        // Close popover FIRST so it releases focus, then activate terminal
+        if let delegate = AppDelegate.shared {
+            delegate.closePopover()
+        }
+
+        // Small delay to let the popover fully close before switching apps
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.activateTerminal()
+        }
+
         updateAppDelegate()
     }
 
@@ -210,10 +220,12 @@ final class ApproverViewModel {
         let workspace = NSWorkspace.shared
         for bundleId in terminalBundleIds {
             if let app = workspace.runningApplications.first(where: { $0.bundleIdentifier == bundleId }) {
+                debugLog("activateTerminal: found \(bundleId), activating")
                 app.activate()
                 return
             }
         }
+        debugLog("activateTerminal: no terminal app found")
     }
 
     // MARK: - Badge
