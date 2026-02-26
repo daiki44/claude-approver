@@ -60,6 +60,12 @@ final class NotificationService: NSObject, @unchecked Sendable {
         center?.setNotificationCategories([completionCategory, permissionCategory])
     }
 
+    /// Remove all delivered notification banners from Notification Center.
+    /// Called when the popover opens to prevent lingering banners from overlaying buttons.
+    func removeAllDelivered() {
+        center?.removeAllDeliveredNotifications()
+    }
+
     func notify(request: PermissionRequest) {
         guard let center else {
             writeLog("notify: center is nil, skipping notification for \(request.toolName)")

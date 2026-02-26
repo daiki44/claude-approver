@@ -207,7 +207,7 @@ actor SocketServer {
 
         // Bridge blocking GCD thread to Swift concurrency
         let semaphore = DispatchSemaphore(value: 0)
-        var decision: DecisionResponse = .deny
+        let decisionBox = UnsafeSendableBox<DecisionResponse>(.deny)
         var cancelled = false
 
         // Store continuation FIRST, then notify UI.
@@ -228,7 +228,7 @@ actor SocketServer {
                     callback?(request)
                 }
             }
-            decision = result
+            decisionBox.value = result
             semaphore.signal()
         }
 
@@ -260,11 +260,13 @@ actor SocketServer {
         }
 
         if waitResult == .timedOut {
-            decision = .deny
+            decisionBox.value = .deny
             Task { [weak self] in
                 await self?.cancelAndNotify(requestId)
             }
         }
+
+        let decision = decisionBox.value
 
         // Passthrough: close connection without sending a response.
         // Hook script receives EOF → returns None → exits with code 1 → passthrough.
@@ -346,6 +348,15 @@ actor SocketServer {
         }
         return buffer
     }
+}
+
+// MARK: - Sendable Box
+
+/// Thread-unsafe box that allows mutating a captured value across concurrency boundaries.
+/// Safety is guaranteed by the caller via DispatchSemaphore synchronization.
+private final class UnsafeSendableBox<T: Sendable>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
 }
 
 // MARK: - Errors

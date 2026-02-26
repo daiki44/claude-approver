@@ -7,10 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
 
     private var statusItem: NSStatusItem!
-    private var popover: NSPopover!
     private let viewModel = ApproverViewModel()
-    private var globalClickMonitor: Any?
-    private var globalKeyMonitor: Any?
+    private var panelController: ApprovalPanelController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
@@ -29,13 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
 
-        // Create popover
-        popover = NSPopover()
-        popover.contentSize = NSSize(width: 380, height: 480)
-        popover.behavior = .applicationDefined
-        popover.contentViewController = NSHostingController(
-            rootView: PopoverRootView(viewModel: viewModel)
-        )
+        // Create panel
+        let controller = ApprovalPanelController()
+        controller.setup(content: PopoverRootView(viewModel: viewModel))
+        panelController = controller
 
         // Start socket server
         Task {
@@ -44,44 +39,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        removeEventMonitors()
+        panelController?.teardown()
         Task {
             await viewModel.shutdown()
         }
     }
 
     @objc private func togglePopover() {
-        guard let button = statusItem.button else { return }
-
-        if popover.isShown {
-            closePopover()
-        } else {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            activateApp()
-            installEventMonitors()
-        }
+        panelController?.toggleFromStatusItem()
     }
 
-    /// Open the popover programmatically (called when a new request arrives)
+    /// Open the panel programmatically (called when a new request arrives)
     func showPopover() {
-        guard let button = statusItem.button else { return }
-        if !popover.isShown {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            activateApp()
-            installEventMonitors()
-            debugLog("[AppDelegate] showPopover: popover opened programmatically")
-        }
+        panelController?.showForIncomingRequest()
     }
 
-    /// Whether the popover is currently visible
+    /// Whether the panel is currently visible
     var isPopoverShown: Bool {
-        popover?.isShown ?? false
+        panelController?.isShown ?? false
     }
 
-    /// Close the popover and remove event monitors
+    /// Close the panel
     func closePopover() {
-        popover.performClose(nil)
-        removeEventMonitors()
+        panelController?.close()
     }
 
     /// Play system beep to draw attention
@@ -113,66 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = " \(count)"
         } else {
             button.title = ""
-        }
-    }
-
-    // MARK: - Private
-
-    private func activateApp() {
-        if #available(macOS 14.0, *) {
-            NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
-    }
-
-    private func installEventMonitors() {
-        // Close on click outside popover
-        if globalClickMonitor == nil {
-            globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
-                matching: [.leftMouseDown, .rightMouseDown]
-            ) { [weak self] _ in
-                self?.closePopover()
-            }
-        }
-        // Close on Escape key
-        if globalKeyMonitor == nil {
-            globalKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                if event.keyCode == 53 { // Escape
-                    self?.closePopover()
-                    return nil
-                }
-                return event
-            }
-        }
-    }
-
-    private func removeEventMonitors() {
-        if let monitor = globalClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalClickMonitor = nil
-        }
-        if let monitor = globalKeyMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalKeyMonitor = nil
-        }
-    }
-
-    private func debugLog(_ message: String) {
-        let logPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/approver_debug.log")
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(timestamp)] \(message)\n"
-        if let data = line.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logPath.path) {
-                if let handle = try? FileHandle(forWritingTo: logPath) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    handle.closeFile()
-                }
-            } else {
-                try? data.write(to: logPath)
-            }
         }
     }
 }

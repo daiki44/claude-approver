@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Card for standard tool permission requests (Bash, Write, MCP, etc.).
-/// Includes risk badge, command display, and Allow / Deny / Always Allow actions.
+/// Includes risk badge, command display, trust options disclosure, and Allow / Deny actions.
 struct ToolPermissionRowView: View {
     let request: PermissionRequest
     let onAllow: () -> Void
@@ -11,6 +11,7 @@ struct ToolPermissionRowView: View {
 
     @State private var showDenyReason = false
     @State private var denyReason = ""
+    @State private var showTrustOptions = false
 
     private var riskColor: Color {
         switch request.riskLevel {
@@ -47,6 +48,11 @@ struct ToolPermissionRowView: View {
                 .background(Color(.textBackgroundColor).opacity(0.5))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 
+            // Trust options disclosure section (only if suggestions available)
+            if !request.permissionSuggestions.isEmpty {
+                trustOptionsSection
+            }
+
             // Deny reason (expandable)
             if showDenyReason {
                 HStack(spacing: 4) {
@@ -62,8 +68,8 @@ struct ToolPermissionRowView: View {
                 }
             }
 
-            // Action buttons
-            HStack {
+            // Action buttons (all right-aligned)
+            HStack(spacing: 6) {
                 // Always Allow menu (only if suggestions available)
                 if !request.permissionSuggestions.isEmpty {
                     Menu {
@@ -86,19 +92,25 @@ struct ToolPermissionRowView: View {
                     showDenyReason.toggle()
                 } label: {
                     Image(systemName: "text.bubble")
+                        .frame(minWidth: 28, minHeight: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("Deny with message")
 
                 Button(action: onDeny) {
-                    Label("Deny", systemImage: "xmark.circle")
+                    Text("Deny")
+                        .frame(minWidth: 44, minHeight: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
 
                 Button(action: onAllow) {
-                    Label("Allow", systemImage: "checkmark.circle")
+                    Text("Allow")
+                        .frame(minWidth: 52, minHeight: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -153,5 +165,110 @@ struct ToolPermissionRowView: View {
             return "~" + path.dropFirst(home.count)
         }
         return (path as NSString).lastPathComponent
+    }
+    // MARK: - Trust Options Disclosure
+
+    @ViewBuilder
+    private var trustOptionsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Disclosure toggle — generous hit area
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showTrustOptions.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .rotationEffect(.degrees(showTrustOptions ? 90 : 0))
+                    Text("Remember this decision...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .frame(minHeight: 24)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showTrustOptions {
+                let trustOptions = request.permissionSuggestions.map { suggestion in
+                    Self.infoForSuggestion(suggestion, defaultTool: request.toolName, projectName: request.projectName)
+                }
+                let hasAnyPermanent = trustOptions.contains { $0.isPermanent }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(zip(request.permissionSuggestions.indices, trustOptions)), id: \.0) { index, info in
+                        TrustOptionRow(info: info) {
+                            onAlwaysAllow([request.permissionSuggestions[index]])
+                        }
+                    }
+
+                    Divider()
+                        .padding(.vertical, 2)
+
+                    Text(hasAnyPermanent
+                         ? "Adds a permanent rule to your Claude Code settings."
+                         : "Applies to the current session only.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(8)
+                .background(Color(.controlBackgroundColor).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    // MARK: - Suggestion → TrustOptionInfo
+
+    /// Convert a raw permission suggestion dict into structured display info.
+    static func infoForSuggestion(
+        _ suggestion: [String: Any],
+        defaultTool: String,
+        projectName: String
+    ) -> TrustOptionInfo {
+        // Check for explicit prompt/label from Claude Code
+        if let prompt = suggestion["prompt"] as? String {
+            let destination = suggestion["destination"] as? String
+            let isPermanent = destination != "session"
+            return TrustOptionInfo(
+                label: prompt,
+                icon: "checkmark.shield",
+                scopeLabel: isPermanent ? "Permanent" : "This session",
+                isPermanent: isPermanent
+            )
+        }
+
+        let destination = suggestion["destination"] as? String
+        let isPermanent = destination != "session"
+        let scopeLabel = isPermanent ? "Permanent" : "This session"
+        let type = suggestion["type"] as? String
+        let tool = suggestion["tool"] as? String ?? defaultTool
+
+        switch type {
+        case "setMode":
+            return TrustOptionInfo(
+                label: "Auto-approve file edits",
+                icon: "pencil.and.outline",
+                scopeLabel: scopeLabel,
+                isPermanent: isPermanent
+            )
+        case "addDirectories":
+            return TrustOptionInfo(
+                label: "Allow \(tool) in \(projectName)",
+                icon: "folder.badge.checkmark",
+                scopeLabel: scopeLabel,
+                isPermanent: isPermanent
+            )
+        default:
+            return TrustOptionInfo(
+                label: "Allow \(tool) without asking",
+                icon: "checkmark.shield",
+                scopeLabel: scopeLabel,
+                isPermanent: isPermanent
+            )
+        }
     }
 }

@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- macOS squircle clip path -->
+    <clipPath id="iconClip">
+      <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224"/>
+    </clipPath>
+
+    <!-- Background gradient: deep navy to dark purple -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="50%" stop-color="#16213e"/>
+      <stop offset="100%" stop-color="#0f0f23"/>
+    </linearGradient>
+
+    <!-- Shield gradient: Claude-inspired warm tones -->
+    <linearGradient id="shieldGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#E8956A"/>
+      <stop offset="45%" stop-color="#D97757"/>
+      <stop offset="100%" stop-color="#C25D3D"/>
+    </linearGradient>
+
+    <!-- Shield inner shadow gradient -->
+    <linearGradient id="shieldInner" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#F0A880"/>
+      <stop offset="100%" stop-color="#B8533A"/>
+    </linearGradient>
+
+    <!-- Glow filter for shield -->
+    <filter id="shieldGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="24" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0.85
+                0 0 0 0 0.47
+                0 0 0 0 0.34
+                0 0 0 0.35 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Subtle ambient light from top -->
+    <radialGradient id="ambientLight" cx="0.5" cy="0.15" r="0.7">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.06)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+
+    <!-- Checkmark shadow -->
+    <filter id="checkShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Clipped icon area -->
+  <g clip-path="url(#iconClip)">
+    <!-- Background -->
+    <rect width="1024" height="1024" fill="url(#bgGrad)"/>
+
+    <!-- Subtle grid pattern for tech feel -->
+    <g opacity="0.03" stroke="#fff" stroke-width="1">
+      <line x1="256" y1="0" x2="256" y2="1024"/>
+      <line x1="512" y1="0" x2="512" y2="1024"/>
+      <line x1="768" y1="0" x2="768" y2="1024"/>
+      <line x1="0" y1="256" x2="1024" y2="256"/>
+      <line x1="0" y1="512" x2="1024" y2="512"/>
+      <line x1="0" y1="768" x2="1024" y2="768"/>
+    </g>
+
+    <!-- Ambient light overlay -->
+    <rect width="1024" height="1024" fill="url(#ambientLight)"/>
+
+    <!-- Shield shape with glow -->
+    <g filter="url(#shieldGlow)" transform="translate(512, 480)">
+      <!-- Shield body -->
+      <path d="
+        M 0 -280
+        C 40 -280, 80 -276, 120 -268
+        L 220 -244
+        C 248 -238, 260 -216, 260 -188
+        L 260 -40
+        C 260 80, 200 190, 80 268
+        L 20 310
+        C 8 318, -8 318, -20 310
+        L -80 268
+        C -200 190, -260 80, -260 -40
+        L -260 -188
+        C -260 -216, -248 -238, -220 -244
+        L -120 -268
+        C -80 -276, -40 -280, 0 -280
+        Z
+      " fill="url(#shieldGrad)"/>
+
+      <!-- Shield highlight edge (top) -->
+      <path d="
+        M 0 -264
+        C 36 -264, 72 -260, 108 -253
+        L 204 -230
+        C 226 -225, 244 -208, 244 -180
+        L 244 -40
+        C 244 72, 188 176, 74 252
+        L 18 292
+        C 8 298, -8 298, -18 292
+        L -74 252
+        C -188 176, -244 72, -244 -40
+        L -244 -180
+        C -244 -208, -226 -225, -204 -230
+        L -108 -253
+        C -72 -260, -36 -264, 0 -264
+        Z
+      " fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+
+      <!-- Inner shield face (subtle depth) -->
+      <path d="
+        M 0 -240
+        C 32 -240, 64 -237, 96 -230
+        L 184 -210
+        C 204 -206, 216 -192, 216 -168
+        L 216 -36
+        C 216 64, 166 156, 66 224
+        L 16 260
+        C 6 266, -6 266, -16 260
+        L -66 224
+        C -166 156, -216 64, -216 -36
+        L -216 -168
+        C -216 -192, -204 -206, -184 -210
+        L -96 -230
+        C -64 -237, -32 -240, 0 -240
+        Z
+      " fill="url(#shieldInner)" opacity="0.3"/>
+    </g>
+
+    <!-- Checkmark -->
+    <g filter="url(#checkShadow)" transform="translate(512, 500)">
+      <path d="
+        M -100 20
+        L -30 90
+        L 110 -60
+      " fill="none" stroke="#FFFFFF" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Bottom subtle reflection -->
+    <rect x="0" y="800" width="1024" height="224" fill="url(#ambientLight)" opacity="0.3" transform="scale(1,-1) translate(0,-1824)"/>
+  </g>
+</svg>

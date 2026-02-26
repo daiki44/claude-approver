@@ -23,24 +23,27 @@ final class ApproverViewModel {
 
         // Wire up the server's onRequest callback
         await server.setOnRequest { [weak self] request in
+            let vm = self
             Task { @MainActor in
-                self?.handleIncomingRequest(request)
+                vm?.handleIncomingRequest(request)
             }
         }
 
         // Wire up the server's onCancel callback.
         // Fires when the hook script dies (terminal handled it, session ended, etc.)
         await server.setOnCancel { [weak self] requestId in
+            let vm = self
             Task { @MainActor in
-                self?.handleCancelledRequest(requestId)
+                vm?.handleCancelledRequest(requestId)
             }
         }
 
         // Wire up the server's onCompletion callback.
         // Fires when a PostToolUse hook reports tool completion.
         await server.setOnCompletion { [weak self] info in
+            let vm = self
             Task { @MainActor in
-                self?.handleCompletion(info)
+                vm?.handleCompletion(info)
             }
         }
 
@@ -70,9 +73,9 @@ final class ApproverViewModel {
         }
 
         queue.enqueue(request)
-        notificationService.notify(request: request)
 
-        // UX: auto-open popover, play sound, highlight button
+        // UX: open popover FIRST so the app is active and willPresent sees it as shown.
+        // This prevents notification banners from overlaying the popover buttons.
         if let delegate = AppDelegate.shared {
             debugLog("  calling showPopover()")
             delegate.showPopover()
@@ -80,6 +83,11 @@ final class ApproverViewModel {
             delegate.bounceButton()
             debugLog("  showPopover() completed")
         }
+
+        // Send notification AFTER popover is shown — banners suppressed by willPresent
+        notificationService.notify(request: request)
+        // Remove any lingering banners from earlier notifications
+        notificationService.removeAllDelivered()
 
         updateAppDelegate()
     }
@@ -179,9 +187,9 @@ final class ApproverViewModel {
         completions.append(info)
         notificationService.notifyCompletion(info: info)
 
-        // Show popover for completion
-        if let delegate = AppDelegate.shared {
-            delegate.showPopover()
+        // Only show popover for completion if there are pending requests
+        // (don't reopen a closed popover just for informational completions)
+        if !queue.isEmpty, let delegate = AppDelegate.shared {
             delegate.bounceButton()
         }
     }
@@ -234,8 +242,8 @@ final class ApproverViewModel {
         guard let delegate = AppDelegate.shared else { return }
         delegate.updateBadge(count: queue.count)
 
-        // Auto-close popover when both queues are empty
-        if queue.isEmpty && completions.isEmpty {
+        // Auto-close popover when all requests have been handled
+        if queue.isEmpty {
             delegate.closePopover()
         }
     }
