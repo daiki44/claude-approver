@@ -6,8 +6,10 @@ BINARY := $(BUILD_DIR)/.build/release/ClaudeApprover
 APP_BUNDLE := $(PREFIX)/ClaudeApprover.app
 APP_BINARY := $(APP_BUNDLE)/Contents/MacOS/ClaudeApprover
 INFO_PLIST_SRC := $(PREFIX)/scripts/Info.plist
-PLIST_SRC := $(PREFIX)/scripts/com.claude.approver.plist
-PLIST_DST := $(HOME)/Library/LaunchAgents/com.claude.approver.plist
+PLIST_TEMPLATE := $(PREFIX)/scripts/launchagent.plist.template
+PLIST_LABEL := io.github.daiki44.claude-approver
+PLIST_DST := $(HOME)/Library/LaunchAgents/$(PLIST_LABEL).plist
+OLD_PLIST_DST := $(HOME)/Library/LaunchAgents/com.claude.approver.plist
 LOG_DIR := $(HOME)/Library/Logs/ClaudeApprover
 
 # ──────────────────────────────────────────────
@@ -42,7 +44,11 @@ install: bundle
 	@echo ""
 	@echo "Installing LaunchAgent..."
 	@mkdir -p $(LOG_DIR)
-	@cp $(PLIST_SRC) $(PLIST_DST)
+	@# Migrate: remove old LaunchAgent if present
+	-launchctl unload $(OLD_PLIST_DST) 2>/dev/null
+	-rm -f $(OLD_PLIST_DST)
+	@# Generate plist from template with actual paths
+	sed -e 's|__HOME__|$(HOME)|g' -e 's|__PREFIX__|$(PREFIX)|g' $(PLIST_TEMPLATE) > $(PLIST_DST)
 	launchctl load $(PLIST_DST)
 	@echo ""
 	@echo "Installation complete!"
@@ -59,6 +65,9 @@ uninstall:
 	@echo "Stopping LaunchAgent..."
 	-launchctl unload $(PLIST_DST) 2>/dev/null
 	-rm -f $(PLIST_DST)
+	@# Also clean up old plist name
+	-launchctl unload $(OLD_PLIST_DST) 2>/dev/null
+	-rm -f $(OLD_PLIST_DST)
 	@echo "Unregistering hook..."
 	python3 $(PREFIX)/scripts/unregister_hook.py
 	@echo ""

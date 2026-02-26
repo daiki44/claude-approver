@@ -9,6 +9,7 @@ If the Approver is not running, it exits immediately with no side effects.
 """
 
 import json
+import re
 import socket
 import struct
 import sys
@@ -18,6 +19,13 @@ SOCKET_PATH = (
     Path.home() / "Library" / "Application Support" / "ClaudeApprover" / "claude-approver.sock"
 )
 TIMEOUT_SECONDS = 5  # Short timeout — completion is fire-and-forget
+
+_ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    return _ANSI_ESCAPE.sub('', text)
 
 
 def _build_result_summary(tool_name: str, tool_input: dict, tool_result) -> tuple[str, bool]:
@@ -81,6 +89,7 @@ def main():
         sys.exit(0)
 
     result_summary, is_error = _build_result_summary(tool_name, tool_input, tool_result)
+    result_summary = _strip_ansi(result_summary)
 
     message = {
         "type": "completion",

@@ -5,6 +5,8 @@ import UserNotifications
 /// Manages native macOS notifications for incoming permission requests.
 /// Gracefully handles cases where UNUserNotificationCenter is unavailable
 /// (e.g., when running outside a proper .app bundle).
+/// @unchecked Sendable: center is set once in init() and only read thereafter.
+/// NSObject conformance prevents automatic Sendable synthesis.
 final class NotificationService: NSObject, @unchecked Sendable {
     static let shared = NotificationService()
     private var center: UNUserNotificationCenter?
@@ -157,7 +159,13 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        // Suppress banners when the popover is visible — banners overlay the popover
+        // and intercept click events, making buttons unresponsive.
+        let popoverShown = await MainActor.run { AppDelegate.shared?.isPopoverShown ?? false }
+        if popoverShown {
+            return []
+        }
+        return [.banner, .sound]
     }
 
     func userNotificationCenter(
