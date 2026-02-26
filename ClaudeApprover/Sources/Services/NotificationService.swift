@@ -119,6 +119,13 @@ final class NotificationService: NSObject, @unchecked Sendable {
         content.sound = .default
         content.categoryIdentifier = "TOOL_COMPLETION"
 
+        // Store TTY in userInfo for terminal tab navigation on click
+        var userInfo: [String: String] = [:]
+        if let tty = info.tty, !tty.isEmpty {
+            userInfo["tty"] = tty
+        }
+        content.userInfo = userInfo
+
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
         let notifRequest = UNNotificationRequest(
             identifier: "completion-\(info.toolUseId)",
@@ -180,13 +187,14 @@ extension NotificationService: UNUserNotificationCenterDelegate {
     ) async {
         let categoryId = response.notification.request.content.categoryIdentifier
         let actionId = response.actionIdentifier
+        let userInfo = response.notification.request.content.userInfo
 
         if categoryId == "TOOL_COMPLETION"
             || actionId == "OPEN_TERMINAL"
             || (categoryId == "TOOL_COMPLETION" && actionId == UNNotificationDefaultActionIdentifier) {
-            // Activate terminal app (try common terminals)
+            let tty = userInfo["tty"] as? String
             await MainActor.run {
-                activateTerminal()
+                TerminalNavigator.navigate(tty: tty)
             }
         } else {
             // Permission request notification — activate Approver
@@ -194,23 +202,6 @@ extension NotificationService: UNUserNotificationCenterDelegate {
                 if let delegate = AppDelegate.shared {
                     delegate.showPopover()
                 }
-            }
-        }
-    }
-
-    private func activateTerminal() {
-        let terminalBundleIds = [
-            "com.mitchellh.ghostty",
-            "com.googlecode.iterm2",
-            "net.kovidgoyal.kitty",
-            "dev.warp.Warp-Stable",
-            "com.apple.Terminal",
-        ]
-        let workspace = NSWorkspace.shared
-        for bundleId in terminalBundleIds {
-            if let app = workspace.runningApplications.first(where: { $0.bundleIdentifier == bundleId }) {
-                app.activate()
-                return
             }
         }
     }

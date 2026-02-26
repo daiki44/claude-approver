@@ -15,6 +15,9 @@ final class ApproverViewModel {
     /// Tracks toolUseIds of approved requests for completion notifications
     private var approvedToolUseIds: Set<String> = []
 
+    /// Session ID to TTY mapping (learned from permission requests)
+    private var sessionTtyMap: [String: String] = [:]
+
     /// Recently completed tools (shown in UI)
     private(set) var completions: [CompletionInfo] = []
 
@@ -64,6 +67,12 @@ final class ApproverViewModel {
         debugLog("handleIncomingRequest: tool=\(request.toolName) type=\(request.requestType) id=\(request.id) toolUseId=\(request.toolUseId)")
         if let inputKeys = (request.toolInput as NSDictionary).allKeys as? [String] {
             debugLog("  input_keys=\(inputKeys)")
+        }
+
+        // Learn TTY mapping from this session
+        if let tty = request.tty, !tty.isEmpty, !request.sessionId.isEmpty {
+            sessionTtyMap[request.sessionId] = tty
+            trimSessionTtyMap()
         }
 
         // Race condition fix: if this request was already cancelled before enqueue, skip it
@@ -132,12 +141,13 @@ final class ApproverViewModel {
     /// Dismiss a question and switch focus to the terminal.
     func goToTerminalForQuestion(requestId: UUID) {
         debugLog("goToTerminalForQuestion: id=\(requestId)")
+        let tty = queue.items.first(where: { $0.id == requestId })?.tty
         resolveRequest(requestId: requestId, decision: .passthrough)
         if let delegate = AppDelegate.shared {
             delegate.closePopover()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            self?.activateTerminal()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            TerminalNavigator.navigate(tty: tty)
         }
     }
 
@@ -195,9 +205,26 @@ final class ApproverViewModel {
             return
         }
 
-        debugLog("  showing completion in UI")
-        completions.append(info)
-        notificationService.notifyCompletion(info: info)
+        // Resolve TTY from sessionTtyMap if missing
+        let resolvedInfo: CompletionInfo
+        if (info.tty == nil || info.tty?.isEmpty == true),
+           let mappedTty = sessionTtyMap[info.sessionId] {
+            resolvedInfo = CompletionInfo(
+                toolName: info.toolName,
+                toolUseId: info.toolUseId,
+                sessionId: info.sessionId,
+                tty: mappedTty,
+                cwd: info.cwd,
+                resultSummary: info.resultSummary,
+                isError: info.isError
+            )
+        } else {
+            resolvedInfo = info
+        }
+
+        debugLog("  showing completion in UI (tty=\(resolvedInfo.tty ?? "nil"))")
+        completions.append(resolvedInfo)
+        notificationService.notifyCompletion(info: resolvedInfo)
 
         // Only show popover for completion if there are pending requests
         // (don't reopen a closed popover just for informational completions)
@@ -214,6 +241,7 @@ final class ApproverViewModel {
 
     /// Go to terminal and dismiss the completion
     func goToTerminal(completionId: UUID) {
+        let tty = completions.first(where: { $0.id == completionId })?.tty
         completions.removeAll { $0.id == completionId }
 
         // Close popover FIRST so it releases focus, then activate terminal
@@ -222,30 +250,11 @@ final class ApproverViewModel {
         }
 
         // Small delay to let the popover fully close before switching apps
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            self?.activateTerminal()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            TerminalNavigator.navigate(tty: tty)
         }
 
         updateAppDelegate()
-    }
-
-    private func activateTerminal() {
-        let terminalBundleIds = [
-            "com.mitchellh.ghostty",
-            "com.googlecode.iterm2",
-            "net.kovidgoyal.kitty",
-            "dev.warp.Warp-Stable",
-            "com.apple.Terminal",
-        ]
-        let workspace = NSWorkspace.shared
-        for bundleId in terminalBundleIds {
-            if let app = workspace.runningApplications.first(where: { $0.bundleIdentifier == bundleId }) {
-                debugLog("activateTerminal: found \(bundleId), activating")
-                app.activate()
-                return
-            }
-        }
-        debugLog("activateTerminal: no terminal app found")
     }
 
     // MARK: - Badge
@@ -257,6 +266,14 @@ final class ApproverViewModel {
         // Auto-close popover when all requests have been handled
         if queue.isEmpty {
             delegate.closePopover()
+        }
+    }
+
+    // MARK: - Session TTY Map
+
+    private func trimSessionTtyMap() {
+        if sessionTtyMap.count > 100 {
+            sessionTtyMap.removeAll()
         }
     }
 

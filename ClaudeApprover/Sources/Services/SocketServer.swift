@@ -201,6 +201,7 @@ actor SocketServer {
             toolUseId: json["tool_use_id"] as? String ?? "",
             sessionId: json["session_id"] as? String ?? "",
             cwd: json["cwd"] as? String ?? "",
+            tty: json["tty"] as? String,
             receivedAt: Date(),
             permissionSuggestions: json["permission_suggestions"] as? [[String: Any]] ?? []
         )
@@ -297,6 +298,8 @@ actor SocketServer {
             toolName: json["tool_name"] as? String ?? "Unknown",
             toolUseId: json["tool_use_id"] as? String ?? "",
             sessionId: json["session_id"] as? String ?? "",
+            tty: json["tty"] as? String,
+            cwd: json["cwd"] as? String ?? "",
             resultSummary: json["result_summary"] as? String ?? "",
             isError: json["is_error"] as? Bool ?? false
         )
