@@ -1,13 +1,12 @@
 import SwiftUI
 
+@MainActor
 struct PopoverRootView: View {
     let viewModel: ApproverViewModel
 
-    private var hasContent: Bool {
-        !viewModel.queue.isEmpty || !viewModel.completions.isEmpty
-    }
-
     var body: some View {
+        let hasContent = !viewModel.queue.isEmpty || !viewModel.completions.isEmpty
+
         VStack(spacing: 0) {
             // Header
             HStack {

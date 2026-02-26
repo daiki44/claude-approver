@@ -23,24 +23,27 @@ final class ApproverViewModel {
 
         // Wire up the server's onRequest callback
         await server.setOnRequest { [weak self] request in
+            let vm = self
             Task { @MainActor in
-                self?.handleIncomingRequest(request)
+                vm?.handleIncomingRequest(request)
             }
         }
 
         // Wire up the server's onCancel callback.
         // Fires when the hook script dies (terminal handled it, session ended, etc.)
         await server.setOnCancel { [weak self] requestId in
+            let vm = self
             Task { @MainActor in
-                self?.handleCancelledRequest(requestId)
+                vm?.handleCancelledRequest(requestId)
             }
         }
 
         // Wire up the server's onCompletion callback.
         // Fires when a PostToolUse hook reports tool completion.
         await server.setOnCompletion { [weak self] info in
+            let vm = self
             Task { @MainActor in
-                self?.handleCompletion(info)
+                vm?.handleCompletion(info)
             }
         }
 
