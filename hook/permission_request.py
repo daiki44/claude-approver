@@ -22,6 +22,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tty_resolver import resolve_tty
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -123,6 +125,7 @@ def main():
             "tool_use_id": hook_input.get("tool_use_id", ""),
             "session_id": session_id,
             "cwd": cwd,
+            "tty": resolve_tty(),
             "received_at": datetime.now(timezone.utc).isoformat(),
             "permission_suggestions": permission_suggestions,
         }

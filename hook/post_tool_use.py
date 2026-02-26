@@ -15,6 +15,8 @@ import struct
 import sys
 from pathlib import Path
 
+from tty_resolver import resolve_tty
+
 SOCKET_PATH = (
     Path.home() / "Library" / "Application Support" / "ClaudeApprover" / "claude-approver.sock"
 )
@@ -96,6 +98,8 @@ def main():
         "tool_name": tool_name,
         "tool_use_id": tool_use_id,
         "session_id": session_id,
+        "cwd": hook_input.get("cwd", ""),
+        "tty": resolve_tty(),
         "result_summary": result_summary,
         "is_error": is_error,
     }

@@ -21,6 +21,7 @@ struct PermissionRequest: Identifiable, Equatable, Sendable {
     let toolUseId: String
     let sessionId: String
     let cwd: String
+    let tty: String?
     let receivedAt: Date
     let permissionSuggestions: [[String: Any]]
 
