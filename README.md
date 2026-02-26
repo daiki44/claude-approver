@@ -33,6 +33,17 @@ Claude Code  <──(hook)──  Python script  <──(UDS)──  DecisionRes
 - **Passthrough** — dismiss requests to let Claude Code handle them in terminal
 - **macOS notifications** — get notified even when focused on other apps
 - **Auto-open/close** — popover opens on new requests and closes when the queue is empty
+- **Keyboard shortcuts** — approve, deny, and navigate without touching the mouse
+
+## Keyboard Shortcuts
+
+| Key | Action | Notes |
+|-----|--------|-------|
+| Enter / Return | Approve top request | Tool permission → Allow, Question → Go to Terminal, Plan → Approve |
+| D | Deny top request | Ignored while typing in a text field |
+| A | Allow all requests | Ignored while typing in a text field |
+| X | Deny all requests | Ignored while typing in a text field |
+| Escape | Close panel | |
 
 ## Requirements
 

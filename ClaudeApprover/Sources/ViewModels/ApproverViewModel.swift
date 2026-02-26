@@ -129,6 +129,18 @@ final class ApproverViewModel {
         resolveRequest(requestId: requestId, decision: .passthrough)
     }
 
+    /// Dismiss a question and switch focus to the terminal.
+    func goToTerminalForQuestion(requestId: UUID) {
+        debugLog("goToTerminalForQuestion: id=\(requestId)")
+        resolveRequest(requestId: requestId, decision: .passthrough)
+        if let delegate = AppDelegate.shared {
+            delegate.closePopover()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.activateTerminal()
+        }
+    }
+
     func approvePlan(requestId: UUID, mode: PlanApprovalMode) {
         debugLog("approvePlan: id=\(requestId) mode=\(mode.label)")
         resolveRequest(requestId: requestId, decision: .allowPlan(mode: mode))

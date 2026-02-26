@@ -30,6 +30,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Create panel
         let controller = ApprovalPanelController()
         controller.setup(content: PopoverRootView(viewModel: viewModel))
+
+        // Wire keyboard shortcuts
+        controller.onEnter = { [weak self] in
+            guard let self, let first = self.viewModel.queue.items.first else { return }
+            switch first.requestType {
+            case .toolPermission:
+                self.viewModel.allow(requestId: first.id)
+            case .question:
+                self.viewModel.goToTerminalForQuestion(requestId: first.id)
+            case .planApproval:
+                self.viewModel.approvePlan(requestId: first.id, mode: .clearContextAutoAccept)
+            }
+        }
+        controller.onDenyTop = { [weak self] in
+            guard let self, let first = self.viewModel.queue.items.first else { return }
+            self.viewModel.deny(requestId: first.id)
+        }
+        controller.onAllowAll = { [weak self] in
+            self?.viewModel.allowAll()
+        }
+        controller.onDenyAll = { [weak self] in
+            self?.viewModel.denyAll()
+        }
+
         panelController = controller
 
         // Start socket server

@@ -23,7 +23,7 @@ struct RequestRowView: View {
         case .question:
             QuestionRowView(
                 request: request,
-                onDismiss: { viewModel.dismiss(requestId: request.id) },
+                onDismiss: { viewModel.goToTerminalForQuestion(requestId: request.id) },
                 onDeny: { viewModel.deny(requestId: request.id) }
             )
 

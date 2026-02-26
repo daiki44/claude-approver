@@ -46,6 +46,12 @@ final class ApprovalPanelController {
     private var globalKeyMonitor: Any?
     private let contentSize = NSSize(width: 380, height: 480)
 
+    // Keyboard action closures (wired by AppDelegate)
+    var onEnter: (() -> Void)?
+    var onDenyTop: (() -> Void)?
+    var onAllowAll: (() -> Void)?
+    var onDenyAll: (() -> Void)?
+
     /// Whether the panel is currently visible.
     var isShown: Bool {
         panel?.isVisible ?? false
@@ -152,14 +158,33 @@ final class ApprovalPanelController {
                 self?.close()
             }
         }
-        // Close on Escape key (backup for when panel is not key)
+        // Keyboard shortcuts for panel actions
         if globalKeyMonitor == nil {
             globalKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                if event.keyCode == 53 { // Escape
-                    self?.close()
+                guard let self else { return event }
+                let isEditing = NSApp.keyWindow?.firstResponder is NSText
+                switch event.keyCode {
+                case 53:       // Escape
+                    self.close()
                     return nil
+                case 36, 76:   // Return / Enter
+                    self.onEnter?()
+                    return nil
+                case 2:        // D
+                    if isEditing { return event }
+                    self.onDenyTop?()
+                    return nil
+                case 0:        // A
+                    if isEditing { return event }
+                    self.onAllowAll?()
+                    return nil
+                case 7:        // X
+                    if isEditing { return event }
+                    self.onDenyAll?()
+                    return nil
+                default:
+                    return event
                 }
-                return event
             }
         }
     }
