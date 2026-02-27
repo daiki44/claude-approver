@@ -140,6 +140,7 @@ final class ApproverViewModel {
     private func handleCancelledRequest(_ requestId: UUID) {
         if queue.dequeue(id: requestId) != nil {
             debugLog("handleCancelledRequest: dequeued id=\(requestId)")
+            notificationService.removeDelivered(requestId: requestId)
             updateAppDelegate()
         } else {
             debugLog("handleCancelledRequest: early cancel id=\(requestId)")
@@ -227,6 +228,7 @@ final class ApproverViewModel {
     private func resolveRequest(requestId: UUID, decision: DecisionResponse) {
         guard let request = queue.dequeue(id: requestId) else { return }
         debugLog("resolveRequest: id=\(requestId) behavior=\(decision.behavior) toolUseId='\(request.toolUseId)'")
+        notificationService.removeDelivered(requestId: requestId)
 
         // Track approved requests for completion notifications
         if decision.behavior == "allow", !request.toolUseId.isEmpty {
