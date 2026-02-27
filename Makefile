@@ -82,8 +82,21 @@ start:
 
 stop:
 	-launchctl unload $(PLIST_DST) 2>/dev/null
+	-killall ClaudeApprover 2>/dev/null
+	@sleep 0.5
 
 restart: stop start
+
+# ──────────────────────────────────────────────
+# Demo (screenshot mode)
+# ──────────────────────────────────────────────
+
+demo: bundle
+	@echo "Stopping existing instance..."
+	-killall ClaudeApprover 2>/dev/null
+	@sleep 0.5
+	@echo "Launching in demo mode..."
+	open -n "$(APP_BUNDLE)" --args --demo
 
 # ──────────────────────────────────────────────
 # Clean

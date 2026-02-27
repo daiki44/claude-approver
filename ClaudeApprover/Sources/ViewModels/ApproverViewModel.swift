@@ -7,6 +7,7 @@ import Foundation
 final class ApproverViewModel {
     let queue = RequestQueue()
     private let server = SocketServer()
+    private(set) var isDemoMode = false
     private let notificationService = NotificationService.shared
 
     /// Tracks request IDs that were cancelled before being enqueued (race condition fix)
@@ -63,6 +64,15 @@ final class ApproverViewModel {
         } catch {
             debugLog("Failed to start socket server: \(error)")
         }
+    }
+
+    /// デモモード: モックデータを直接キューに投入（SocketServer 不要）
+    func loadDemoData() {
+        isDemoMode = true
+        for request in DemoDataProvider.mockRequests() {
+            queue.enqueue(request)
+        }
+        completions = DemoDataProvider.mockCompletions()
     }
 
     func shutdown() async {
@@ -191,9 +201,11 @@ final class ApproverViewModel {
     func allowAll() {
         let items = queue.items
         queue.clear()
-        for item in items {
-            Task {
-                await server.resolve(requestId: item.id, decision: .allow)
+        if !isDemoMode {
+            for item in items {
+                Task {
+                    await server.resolve(requestId: item.id, decision: .allow)
+                }
             }
         }
         updateAppDelegate()
@@ -202,9 +214,11 @@ final class ApproverViewModel {
     func denyAll() {
         let items = queue.items
         queue.clear()
-        for item in items {
-            Task {
-                await server.resolve(requestId: item.id, decision: .deny)
+        if !isDemoMode {
+            for item in items {
+                Task {
+                    await server.resolve(requestId: item.id, decision: .deny)
+                }
             }
         }
         updateAppDelegate()
@@ -220,8 +234,10 @@ final class ApproverViewModel {
             debugLog("  tracking toolUseId=\(request.toolUseId) for completion (total=\(approvedToolUseIds.count))")
         }
 
-        Task {
-            await server.resolve(requestId: requestId, decision: decision)
+        if !isDemoMode {
+            Task {
+                await server.resolve(requestId: requestId, decision: decision)
+            }
         }
         updateAppDelegate()
     }
@@ -296,7 +312,8 @@ final class ApproverViewModel {
         delegate.updateBadge(count: queue.count)
 
         // Auto-close popover when all requests have been handled
-        if queue.isEmpty {
+        // (skip in demo mode — user is taking screenshots)
+        if queue.isEmpty && !isDemoMode {
             delegate.closePopover()
         }
     }

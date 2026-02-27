@@ -56,9 +56,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panelController = controller
 
-        // Start socket server
-        Task {
-            await viewModel.start()
+        // Start in demo mode or normal mode
+        if CommandLine.arguments.contains("--demo") {
+            viewModel.loadDemoData()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.showPopover()
+                self?.updateBadge(count: self?.viewModel.queue.count ?? 0)
+            }
+        } else {
+            Task {
+                await viewModel.start()
+            }
         }
     }
 

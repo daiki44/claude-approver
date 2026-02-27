@@ -4,6 +4,11 @@
 
 A macOS menu bar app that replaces Claude Code's terminal permission dialogs with a native SwiftUI popover. Instead of switching to your terminal every time Claude Code needs approval, you get a clean GUI right from the menu bar.
 
+<p align="center">
+  <img src="docs/screenshots/permissions-and-completions.png" width="360" alt="Permission requests and completion tracking" />
+  <img src="docs/screenshots/questions-and-plans.png" width="360" alt="Questions and plan approvals" />
+</p>
+
 ## How It Works
 
 ```
@@ -82,6 +87,7 @@ This will:
 | `make start` | Load the LaunchAgent |
 | `make stop` | Unload the LaunchAgent |
 | `make restart` | Stop + start |
+| `make demo` | Build + launch with mock data for screenshots |
 | `make clean` | Clean build artifacts + remove `.app` bundle |
 
 ## Project Structure
