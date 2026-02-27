@@ -190,11 +190,11 @@ final class ApproverViewModel {
         debugLog("goToTerminalForQuestion: id=\(requestId)")
         let tty = queue.items.first(where: { $0.id == requestId })?.tty
         resolveRequest(requestId: requestId, decision: .passthrough)
+        // Activate terminal FIRST, then close popover to avoid macOS restoring
+        // focus to the previously-active app (e.g. Slack) during orderOut.
+        TerminalNavigator.navigate(tty: tty)
         if let delegate = AppDelegate.shared {
             delegate.closePopover()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            TerminalNavigator.navigate(tty: tty)
         }
     }
 
@@ -311,14 +311,11 @@ final class ApproverViewModel {
         let tty = completions.first(where: { $0.id == completionId })?.tty
         completions.removeAll { $0.id == completionId }
 
-        // Close popover without restoring focus — we're switching to terminal
+        // Activate terminal FIRST, then close popover to avoid macOS restoring
+        // focus to the previously-active app (e.g. Slack) during orderOut.
+        TerminalNavigator.navigate(tty: tty)
         if let delegate = AppDelegate.shared {
             delegate.closePopover()
-        }
-
-        // Small delay to let the popover fully close before switching apps
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            TerminalNavigator.navigate(tty: tty)
         }
 
         updateAppDelegate()
