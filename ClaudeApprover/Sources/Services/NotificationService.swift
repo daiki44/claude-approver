@@ -66,6 +66,12 @@ final class NotificationService: NSObject, @unchecked Sendable {
         center?.removeAllDeliveredNotifications()
     }
 
+    /// Remove a specific delivered notification by request ID.
+    /// Called when a request is resolved or cancelled (e.g. handled in terminal).
+    func removeDelivered(requestId: UUID) {
+        center?.removeDeliveredNotifications(withIdentifiers: [requestId.uuidString])
+    }
+
     func notify(request: PermissionRequest) {
         guard let center else {
             writeLog("notify: center is nil, skipping notification for \(request.toolName)")
