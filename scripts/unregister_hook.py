@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Unregister the ClaudeApprover hook from ~/.claude/settings.json.
-Removes from both PermissionRequest and PreToolUse (legacy).
+Unregister ClaudeApprover hooks from ~/.claude/settings.json.
+Removes PermissionRequest, PostToolUse, and PreToolUse (legacy) entries.
 """
 
 import json
@@ -11,17 +11,29 @@ from pathlib import Path
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 
 
-def _remove_hook_entries(hook_list: list) -> tuple[list, int]:
-    """Remove entries containing permission_request.py. Returns (filtered, removed_count)."""
+def _remove_hook_entries(hook_list: list, script_name: str) -> tuple[list, int]:
+    """Remove entries containing the given script name. Returns (filtered, removed_count)."""
     filtered = [
         entry
         for entry in hook_list
         if not any(
-            h.get("command", "").endswith("permission_request.py")
+            h.get("command", "").endswith(script_name)
             for h in entry.get("hooks", [])
         )
     ]
     return filtered, len(hook_list) - len(filtered)
+
+
+def _clean_hook_section(hooks: dict, section: str, script_name: str) -> int:
+    """Remove hook entries from a section and clean up empty sections. Returns removed count."""
+    if section not in hooks:
+        return 0
+    filtered, removed = _remove_hook_entries(hooks[section], script_name)
+    if filtered:
+        hooks[section] = filtered
+    else:
+        del hooks[section]
+    return removed
 
 
 def main():
@@ -36,22 +48,13 @@ def main():
     total_removed = 0
 
     # Remove from PermissionRequest
-    if "PermissionRequest" in hooks:
-        filtered, removed = _remove_hook_entries(hooks["PermissionRequest"])
-        total_removed += removed
-        if filtered:
-            hooks["PermissionRequest"] = filtered
-        else:
-            del hooks["PermissionRequest"]
+    total_removed += _clean_hook_section(hooks, "PermissionRequest", "permission_request.py")
+
+    # Remove from PostToolUse
+    total_removed += _clean_hook_section(hooks, "PostToolUse", "post_tool_use.py")
 
     # Remove from PreToolUse (legacy)
-    if "PreToolUse" in hooks:
-        filtered, removed = _remove_hook_entries(hooks["PreToolUse"])
-        total_removed += removed
-        if filtered:
-            hooks["PreToolUse"] = filtered
-        else:
-            del hooks["PreToolUse"]
+    total_removed += _clean_hook_section(hooks, "PreToolUse", "permission_request.py")
 
     if total_removed == 0:
         print("Hook not found. Nothing to unregister.")
