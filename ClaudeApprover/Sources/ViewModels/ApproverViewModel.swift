@@ -176,7 +176,7 @@ final class ApproverViewModel {
         let tty = queue.items.first(where: { $0.id == requestId })?.tty
         resolveRequest(requestId: requestId, decision: .passthrough)
         if let delegate = AppDelegate.shared {
-            delegate.closePopover()
+            delegate.closePopover(restoreFocus: false)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             TerminalNavigator.navigate(tty: tty)
@@ -276,9 +276,9 @@ final class ApproverViewModel {
         let tty = completions.first(where: { $0.id == completionId })?.tty
         completions.removeAll { $0.id == completionId }
 
-        // Close popover FIRST so it releases focus, then activate terminal
+        // Close popover without restoring focus — we're switching to terminal
         if let delegate = AppDelegate.shared {
-            delegate.closePopover()
+            delegate.closePopover(restoreFocus: false)
         }
 
         // Small delay to let the popover fully close before switching apps

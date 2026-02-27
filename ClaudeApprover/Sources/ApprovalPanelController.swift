@@ -44,6 +44,7 @@ final class ApprovalPanelController {
     private var panel: ApprovalPanel?
     private var globalClickMonitor: Any?
     private var globalKeyMonitor: Any?
+    private var previousApplication: NSRunningApplication?
     private let contentSize = NSSize(width: 380, height: 480)
 
     // Keyboard action closures (wired by AppDelegate)
@@ -113,20 +114,36 @@ final class ApprovalPanelController {
             positionNearStatusBar()
             installEventMonitors()
         }
+        // Save the frontmost app before stealing focus (first request only)
+        if previousApplication == nil {
+            let frontmost = NSWorkspace.shared.frontmostApplication
+            if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
+                previousApplication = frontmost
+            }
+        }
         activateApp()
         panel.makeKeyAndOrderFront(nil)
         NSApp.requestUserAttention(.criticalRequest)
     }
 
     /// Close the panel and clean up event monitors.
-    func close() {
+    /// When `restoreFocus` is true (default), re-activates the app that was
+    /// frontmost before the panel appeared.
+    func close(restoreFocus: Bool = true) {
         panel?.orderOut(nil)
         removeEventMonitors()
+        if restoreFocus, let app = previousApplication {
+            // Hide ourselves first so the OS doesn't keep us as frontmost,
+            // then activate the previous app.
+            NSApp.hide(nil)
+            app.activate()
+        }
+        previousApplication = nil
     }
 
     /// Full cleanup on app termination.
     func teardown() {
-        close()
+        close(restoreFocus: false)
         panel = nil
     }
 

@@ -12,6 +12,14 @@ struct ToolPermissionRowView: View {
     @State private var showDenyReason = false
     @State private var denyReason = ""
     @State private var showTrustOptions = false
+    @State private var isCommandExpanded = false
+
+    /// Whether the command text is long enough to warrant a Show more/less toggle
+    private var isCommandTruncatable: Bool {
+        let text = request.displayCommand
+        return text.count > 200
+            || text.components(separatedBy: "\n").count > 5
+    }
 
     private var riskColor: Color {
         switch request.riskLevel {
@@ -44,14 +52,45 @@ struct ToolPermissionRowView: View {
             } else if request.isWriteTool {
                 WriteContentView(request: request)
             } else {
-                Text(request.displayCommand)
-                    .font(.system(.caption, design: .monospaced))
-                    .lineLimit(5)
-                    .foregroundStyle(.primary)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.textBackgroundColor).opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(request.displayCommand)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(isCommandExpanded ? nil : 5)
+                        .foregroundStyle(.primary)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            guard isCommandTruncatable else { return }
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isCommandExpanded.toggle()
+                            }
+                        }
+
+                    if isCommandTruncatable {
+                        Divider()
+                            .opacity(0.5)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isCommandExpanded.toggle()
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: isCommandExpanded ? "chevron.up" : "ellipsis")
+                                    .font(.caption2)
+                                Text(isCommandExpanded ? "Show less" : "Show more")
+                                    .font(.caption)
+                            }
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .background(Color(.textBackgroundColor).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
             // Trust options disclosure section (only if suggestions available)
