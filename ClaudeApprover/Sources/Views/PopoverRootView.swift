@@ -14,6 +14,14 @@ struct PopoverRootView: View {
                     .foregroundStyle(.blue)
                 Text("Claude Approver")
                     .font(.headline)
+
+                Image(systemName: "keyboard")
+                    .foregroundStyle(viewModel.isKeyboardShortcutsActive ? .blue : .secondary.opacity(0.4))
+                    .help(viewModel.isKeyboardShortcutsActive
+                          ? "Keyboard shortcuts active"
+                          : "Click panel to enable shortcuts")
+                    .animation(.easeInOut(duration: 0.2), value: viewModel.isKeyboardShortcutsActive)
+
                 Spacer()
                 if !viewModel.queue.isEmpty {
                     Button("Allow All") {
