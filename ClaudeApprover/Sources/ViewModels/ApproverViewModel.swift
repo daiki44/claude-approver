@@ -18,6 +18,14 @@ final class ApproverViewModel {
     /// Session ID to TTY mapping (learned from permission requests)
     private var sessionTtyMap: [String: String] = [:]
 
+    /// Sessions where user enabled "Auto-approve file edits" (acceptEdits mode).
+    /// Workaround for Claude Code race condition: when mode switch via updatedPermissions
+    /// hasn't been applied before the next Edit/Write permission check fires.
+    private var autoApproveEditSessions: Set<String> = []
+
+    /// Tool names that are auto-approved in acceptEdits mode
+    private static let editToolNames: Set<String> = ["Edit", "Write", "NotebookEdit"]
+
     /// Recently completed tools (shown in UI)
     private(set) var completions: [CompletionInfo] = []
 
@@ -81,6 +89,22 @@ final class ApproverViewModel {
             return
         }
 
+        // Auto-approve Edit/Write/NotebookEdit if session has acceptEdits mode active.
+        // This works around Claude Code's race condition where updatedPermissions
+        // mode switch hasn't been applied before the next permission check fires.
+        if autoApproveEditSessions.contains(request.sessionId),
+           request.requestType == .toolPermission,
+           Self.editToolNames.contains(request.toolName) {
+            debugLog("  auto-approved: tool=\(request.toolName) session=\(request.shortSessionId) (acceptEdits mode active)")
+            if !request.toolUseId.isEmpty {
+                approvedToolUseIds.insert(request.toolUseId)
+            }
+            Task {
+                await server.resolve(requestId: request.id, decision: .allow)
+            }
+            return
+        }
+
         queue.enqueue(request)
 
         // UX: open popover FIRST so the app is active and willPresent sees it as shown.
@@ -128,6 +152,14 @@ final class ApproverViewModel {
     }
 
     func alwaysAllow(requestId: UUID, permissions: [[String: Any]]) {
+        // Track session for client-side auto-approve if setMode/acceptEdits
+        if let request = queue.items.first(where: { $0.id == requestId }),
+           !request.sessionId.isEmpty,
+           permissions.contains(where: { Self.isSetModeAcceptEdits($0) }) {
+            autoApproveEditSessions.insert(request.sessionId)
+            trimAutoApproveEditSessions()
+            debugLog("alwaysAllow: acceptEdits mode enabled for session=\(request.shortSessionId)")
+        }
         resolveRequest(requestId: requestId, decision: .allowWith(permissions: permissions))
     }
 
@@ -266,6 +298,20 @@ final class ApproverViewModel {
         // Auto-close popover when all requests have been handled
         if queue.isEmpty {
             delegate.closePopover()
+        }
+    }
+
+    // MARK: - Auto-Approve Helpers
+
+    /// Check if a permission suggestion is a setMode/acceptEdits request
+    private static func isSetModeAcceptEdits(_ suggestion: [String: Any]) -> Bool {
+        suggestion["type"] as? String == "setMode"
+            && suggestion["mode"] as? String == "acceptEdits"
+    }
+
+    private func trimAutoApproveEditSessions() {
+        if autoApproveEditSessions.count > 50 {
+            autoApproveEditSessions.removeAll()
         }
     }
 
