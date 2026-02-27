@@ -249,6 +249,19 @@ final class ApproverViewModel {
     private func handleCompletion(_ info: CompletionInfo) {
         debugLog("handleCompletion: tool=\(info.toolName) toolUseId=\(info.toolUseId) isError=\(info.isError)")
 
+        // Safety net: clean up stale requests with the same toolUseId.
+        // If a completion arrives but the request is still in the queue, it means
+        // the terminal handled it (e.g. AskUserQuestion answered in terminal).
+        if !info.toolUseId.isEmpty,
+           let staleRequest = queue.items.first(where: { $0.toolUseId == info.toolUseId }) {
+            debugLog("  cleaning up stale request: id=\(staleRequest.id)")
+            _ = queue.dequeue(id: staleRequest.id)
+            notificationService.removeDelivered(requestId: staleRequest.id)
+            // Continuation may already be gone (hook exited), but attempt to release it
+            Task { await server.resolve(requestId: staleRequest.id, decision: .deny) }
+            updateAppDelegate()
+        }
+
         // Only notify for tools that were approved via the Approver
         guard approvedToolUseIds.remove(info.toolUseId) != nil else {
             debugLog("  skipped: toolUseId not tracked")

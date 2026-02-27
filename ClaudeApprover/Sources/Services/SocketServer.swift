@@ -209,7 +209,7 @@ actor SocketServer {
         // Bridge blocking GCD thread to Swift concurrency
         let semaphore = DispatchSemaphore(value: 0)
         let decisionBox = UnsafeSendableBox<DecisionResponse>(.deny)
-        var cancelled = false
+        let cancelledBox = UnsafeSendableBox<Bool>(false)
 
         // Store continuation FIRST, then notify UI.
         // This guarantees pendingHandlers[requestId] exists before the user
@@ -236,13 +236,19 @@ actor SocketServer {
         // Monitor socket for remote close (hook script died / terminal handled it).
         // When the hook process is killed or exits, the kernel closes the socket,
         // and DispatchSource fires so we can clean up the request from the queue.
+        //
+        // Both monitorSource and timerSource detect remote close independently.
+        // cancelledBox prevents double-signal: the first to detect cancels the other.
         let monitorSource = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .global(qos: .utility))
+        let timerSource = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+
         monitorSource.setEventHandler { [weak self] in
+            guard !cancelledBox.value else { return }
             var buf = UInt8(0)
             let n = Darwin.recv(fd, &buf, 1, Int32(MSG_PEEK))
             if n <= 0 {
-                // Remote end closed — hook script died or terminal handled the request
-                cancelled = true
+                cancelledBox.value = true
+                timerSource.cancel()
                 Task { [weak self] in
                     await self?.cancelAndNotify(requestId)
                 }
@@ -251,11 +257,41 @@ actor SocketServer {
         }
         monitorSource.resume()
 
+        // Timer-based polling as a secondary detection mechanism.
+        // DispatchSource.makeReadSource may not reliably fire for FIN on UDS,
+        // so we poll every 3 seconds with a non-blocking MSG_PEEK recv.
+        timerSource.schedule(deadline: .now() + 3, repeating: 3.0, leeway: .seconds(1))
+        timerSource.setEventHandler { [weak self] in
+            guard !cancelledBox.value else { return }
+            var buf = UInt8(0)
+            let n = Darwin.recv(fd, &buf, 1, Int32(MSG_PEEK | MSG_DONTWAIT))
+            if n == 0 {
+                // FIN received — remote end closed gracefully
+                cancelledBox.value = true
+                monitorSource.cancel()
+                Task { [weak self] in
+                    await self?.cancelAndNotify(requestId)
+                }
+                semaphore.signal()
+            } else if n < 0 && errno != EAGAIN && errno != EWOULDBLOCK {
+                // Connection broken
+                cancelledBox.value = true
+                monitorSource.cancel()
+                Task { [weak self] in
+                    await self?.cancelAndNotify(requestId)
+                }
+                semaphore.signal()
+            }
+            // EAGAIN/EWOULDBLOCK = socket alive, no data — continue polling
+        }
+        timerSource.resume()
+
         // Block this GCD thread until: user decision, remote close, or timeout
         let waitResult = semaphore.wait(timeout: .now() + 300)
         monitorSource.cancel()
+        timerSource.cancel()
 
-        if cancelled {
+        if cancelledBox.value {
             // Connection already closed — no response to send
             return
         }
