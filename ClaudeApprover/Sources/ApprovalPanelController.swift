@@ -8,12 +8,21 @@ import SwiftUI
 final class ApprovalPanel: NSPanel {
     /// Called when Escape is pressed while the panel is key.
     var onEscape: (() -> Void)?
+    /// Called when the user clicks inside the panel to activate it.
+    var onActivate: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
     override func cancelOperation(_ sender: Any?) {
         onEscape?()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        if !isKeyWindow {
+            onActivate?()
+        }
     }
 }
 
@@ -44,8 +53,10 @@ final class ApprovalPanelController {
     private var panel: ApprovalPanel?
     private var globalClickMonitor: Any?
     private var globalKeyMonitor: Any?
-    private var previousApplication: NSRunningApplication?
     private let contentSize = NSSize(width: 380, height: 480)
+
+    /// Notifies whether the panel is the key window (keyboard shortcuts active).
+    var onKeyWindowChanged: ((Bool) -> Void)?
 
     // Keyboard action closures (wired by AppDelegate)
     var onEnter: (() -> Void)?
@@ -88,6 +99,25 @@ final class ApprovalPanelController {
             self?.close()
         }
 
+        panel.onActivate = { [weak self] in
+            self?.activateAndMakeKey()
+        }
+
+        // Track key window state for keyboard shortcut indicator
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: panel, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onKeyWindowChanged?(true) }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: panel, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onKeyWindowChanged?(false) }
+        }
+
         self.panel = panel
     }
 
@@ -107,43 +137,27 @@ final class ApprovalPanelController {
     }
 
     /// Show panel for an incoming approval request.
-    /// Activates the app and requests user attention.
+    /// Does NOT steal focus — the panel floats over other windows.
+    /// The user must click the panel to enable keyboard shortcuts.
     func showForIncomingRequest() {
         guard let panel else { return }
         if !panel.isVisible {
             positionNearStatusBar()
             installEventMonitors()
         }
-        // Save the frontmost app before stealing focus (first request only)
-        if previousApplication == nil {
-            let frontmost = NSWorkspace.shared.frontmostApplication
-            if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
-                previousApplication = frontmost
-            }
-        }
-        activateApp()
-        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         NSApp.requestUserAttention(.criticalRequest)
     }
 
     /// Close the panel and clean up event monitors.
-    /// When `restoreFocus` is true (default), re-activates the app that was
-    /// frontmost before the panel appeared.
-    func close(restoreFocus: Bool = true) {
+    func close() {
         panel?.orderOut(nil)
         removeEventMonitors()
-        if restoreFocus, let app = previousApplication {
-            // Hide ourselves first so the OS doesn't keep us as frontmost,
-            // then activate the previous app.
-            NSApp.hide(nil)
-            app.activate()
-        }
-        previousApplication = nil
     }
 
     /// Full cleanup on app termination.
     func teardown() {
-        close(restoreFocus: false)
+        close()
         panel = nil
     }
 
@@ -158,12 +172,15 @@ final class ApprovalPanelController {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
-    private func activateApp() {
+    /// User explicitly clicked the panel — activate app and make key.
+    private func activateAndMakeKey() {
+        guard let panel else { return }
         if #available(macOS 14.0, *) {
             NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
         } else {
             NSApp.activate(ignoringOtherApps: true)
         }
+        panel.makeKeyAndOrderFront(nil)
     }
 
     private func installEventMonitors() {
