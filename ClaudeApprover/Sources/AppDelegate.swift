@@ -84,8 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Close the panel
-    func closePopover() {
-        panelController?.close()
+    func closePopover(restoreFocus: Bool = true) {
+        panelController?.close(restoreFocus: restoreFocus)
     }
 
     /// Play system beep to draw attention
