@@ -54,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.viewModel.denyAll()
         }
 
+        controller.onKeyWindowChanged = { [weak self] isKey in
+            self?.viewModel.isKeyboardShortcutsActive = isKey
+        }
+
         panelController = controller
 
         // Start in demo mode or normal mode
@@ -92,8 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Close the panel
-    func closePopover(restoreFocus: Bool = true) {
-        panelController?.close(restoreFocus: restoreFocus)
+    func closePopover() {
+        panelController?.close()
     }
 
     /// Play system beep to draw attention

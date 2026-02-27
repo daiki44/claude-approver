@@ -10,6 +10,10 @@ final class ApproverViewModel {
     private(set) var isDemoMode = false
     private let notificationService = NotificationService.shared
 
+    /// Whether the approval panel is the key window (keyboard shortcuts active).
+    /// Set by AppDelegate via ApprovalPanelController.onKeyWindowChanged.
+    var isKeyboardShortcutsActive = false
+
     /// Tracks request IDs that were cancelled before being enqueued (race condition fix)
     private var earlyCancelledIds: Set<UUID> = []
 
@@ -187,7 +191,7 @@ final class ApproverViewModel {
         let tty = queue.items.first(where: { $0.id == requestId })?.tty
         resolveRequest(requestId: requestId, decision: .passthrough)
         if let delegate = AppDelegate.shared {
-            delegate.closePopover(restoreFocus: false)
+            delegate.closePopover()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             TerminalNavigator.navigate(tty: tty)
@@ -296,7 +300,7 @@ final class ApproverViewModel {
 
         // Close popover without restoring focus — we're switching to terminal
         if let delegate = AppDelegate.shared {
-            delegate.closePopover(restoreFocus: false)
+            delegate.closePopover()
         }
 
         // Small delay to let the popover fully close before switching apps
