@@ -133,6 +133,9 @@ final class ApprovalPanelController {
         panel?.orderOut(nil)
         removeEventMonitors()
         if restoreFocus, let app = previousApplication {
+            // Hide ourselves first so the OS doesn't keep us as frontmost,
+            // then activate the previous app.
+            NSApp.hide(nil)
             app.activate()
         }
         previousApplication = nil
