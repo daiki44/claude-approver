@@ -178,10 +178,14 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        // Suppress banners when the popover is visible — banners overlay the popover
-        // and intercept click events, making buttons unresponsive.
-        let popoverShown = await MainActor.run { AppDelegate.shared?.isPopoverShown ?? false }
-        if popoverShown {
+        // Suppress banners only when the popover is visible AND the app is frontmost.
+        // When the user is in another app, the popover is not visible even if "shown",
+        // so we must deliver banners to notify them of new requests.
+        let shouldSuppress = await MainActor.run {
+            guard let delegate = AppDelegate.shared else { return false }
+            return delegate.isPopoverShown && NSApp.isActive
+        }
+        if shouldSuppress {
             return []
         }
         return [.banner, .sound]
