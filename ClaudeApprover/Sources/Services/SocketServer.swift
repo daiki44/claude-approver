@@ -259,8 +259,8 @@ actor SocketServer {
 
         // Timer-based polling as a secondary detection mechanism.
         // DispatchSource.makeReadSource may not reliably fire for FIN on UDS,
-        // so we poll every 3 seconds with a non-blocking MSG_PEEK recv.
-        timerSource.schedule(deadline: .now() + 3, repeating: 3.0, leeway: .seconds(1))
+        // so we poll every 0.5 seconds with a non-blocking MSG_PEEK recv.
+        timerSource.schedule(deadline: .now() + 0.5, repeating: 0.5, leeway: .milliseconds(100))
         timerSource.setEventHandler { [weak self] in
             guard !cancelledBox.value else { return }
             var buf = UInt8(0)
