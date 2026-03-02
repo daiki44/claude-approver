@@ -17,8 +17,14 @@ final class ApproverViewModel {
     /// Tracks request IDs that were cancelled before being enqueued (race condition fix)
     private var earlyCancelledIds: Set<UUID> = []
 
-    /// Tracks toolUseIds of approved requests for completion notifications
-    private var approvedToolUseIds: Set<String> = []
+    /// Tracks approved requests for completion notifications via approximate matching.
+    /// toolUseId is unavailable in PermissionRequest, so we match by (sessionId, toolName, timestamp).
+    private struct ApprovedTool: Equatable {
+        let sessionId: String
+        let toolName: String
+        let approvedAt: Date
+    }
+    private var approvedTools: [ApprovedTool] = []
 
     /// Session ID to TTY mapping (learned from permission requests)
     private var sessionTtyMap: [String: String] = [:]
@@ -110,9 +116,12 @@ final class ApproverViewModel {
            request.requestType == .toolPermission,
            Self.editToolNames.contains(request.toolName) {
             debugLog("  auto-approved: tool=\(request.toolName) session=\(request.shortSessionId) (acceptEdits mode active)")
-            if !request.toolUseId.isEmpty {
-                approvedToolUseIds.insert(request.toolUseId)
-            }
+            approvedTools.append(ApprovedTool(
+                sessionId: request.sessionId,
+                toolName: request.toolName,
+                approvedAt: Date()
+            ))
+            trimApprovedTools()
             Task {
                 await server.resolve(requestId: request.id, decision: .allow)
             }
@@ -234,9 +243,14 @@ final class ApproverViewModel {
         notificationService.removeDelivered(requestId: requestId)
 
         // Track approved requests for completion notifications
-        if decision.behavior == "allow", !request.toolUseId.isEmpty {
-            approvedToolUseIds.insert(request.toolUseId)
-            debugLog("  tracking toolUseId=\(request.toolUseId) for completion (total=\(approvedToolUseIds.count))")
+        if decision.behavior == "allow" {
+            approvedTools.append(ApprovedTool(
+                sessionId: request.sessionId,
+                toolName: request.toolName,
+                approvedAt: Date()
+            ))
+            trimApprovedTools()
+            debugLog("  tracking session=\(request.shortSessionId) tool=\(request.toolName) for completion (total=\(approvedTools.count))")
         }
 
         if !isDemoMode {
@@ -265,11 +279,18 @@ final class ApproverViewModel {
             updateAppDelegate()
         }
 
-        // Only notify for tools that were approved via the Approver
-        guard approvedToolUseIds.remove(info.toolUseId) != nil else {
-            debugLog("  skipped: toolUseId not tracked")
+        // Only notify for tools that were approved via the Approver.
+        // Match by (sessionId, toolName) within 10-minute window since toolUseId is unavailable at approval time.
+        let cutoff = Date().addingTimeInterval(-600)
+        guard let matchIndex = approvedTools.lastIndex(where: {
+            $0.sessionId == info.sessionId
+                && $0.toolName == info.toolName
+                && $0.approvedAt > cutoff
+        }) else {
+            debugLog("  skipped: no matching approved tool (session=\(info.sessionId.prefix(8)) tool=\(info.toolName))")
             return
         }
+        approvedTools.remove(at: matchIndex)
 
         // Resolve TTY from sessionTtyMap if missing
         let resolvedInfo: CompletionInfo
@@ -344,6 +365,16 @@ final class ApproverViewModel {
     private func trimAutoApproveEditSessions() {
         if autoApproveEditSessions.count > 50 {
             autoApproveEditSessions.removeAll()
+        }
+    }
+
+    // MARK: - Approved Tools Cleanup
+
+    private func trimApprovedTools() {
+        let cutoff = Date().addingTimeInterval(-600)
+        approvedTools.removeAll { $0.approvedAt <= cutoff }
+        if approvedTools.count > 200 {
+            approvedTools.removeFirst(approvedTools.count - 200)
         }
     }
 
