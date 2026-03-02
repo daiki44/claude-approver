@@ -17,9 +17,6 @@ final class ApproverViewModel {
     /// Tracks request IDs that were cancelled before being enqueued (race condition fix)
     private var earlyCancelledIds: Set<UUID> = []
 
-    /// Session ID to TTY mapping (learned from permission requests)
-    private var sessionTtyMap: [String: String] = [:]
-
     /// Sessions where user enabled "Auto-approve file edits" (acceptEdits mode).
     /// Workaround for Claude Code race condition: when mode switch via updatedPermissions
     /// hasn't been applied before the next Edit/Write permission check fires.
@@ -27,16 +24,6 @@ final class ApproverViewModel {
 
     /// Tool names that are auto-approved in acceptEdits mode
     private static let editToolNames: Set<String> = ["Edit", "Write", "NotebookEdit"]
-
-    /// Recently completed tools (shown in UI)
-    private(set) var completions: [CompletionInfo] = []
-
-    /// Debounce buffer: accumulate completions per session, flush after 3s of silence.
-    /// This collapses a multi-tool response into a single notification per rally.
-    private var pendingCompletions: [CompletionInfo] = []
-    private var completionDebounceTask: Task<Void, Never>?
-    private var accumulatedToolCounts: [String: Int] = [:]  // sessionId → total tool count
-    private static let completionDebounceSeconds: Double = 10.0
 
     func start() async {
         notificationService.requestAuthorization()
@@ -58,15 +45,6 @@ final class ApproverViewModel {
             }
         }
 
-        // Wire up the server's onCompletion callback.
-        // Fires when a PostToolUse hook reports tool completion.
-        await server.setOnCompletion { [weak self] info in
-            let vm = self
-            Task { @MainActor in
-                vm?.handleCompletion(info)
-            }
-        }
-
         do {
             try await server.start()
         } catch {
@@ -80,7 +58,6 @@ final class ApproverViewModel {
         for request in DemoDataProvider.mockRequests() {
             queue.enqueue(request)
         }
-        completions = DemoDataProvider.mockCompletions()
     }
 
     func shutdown() async {
@@ -93,12 +70,6 @@ final class ApproverViewModel {
         debugLog("handleIncomingRequest: tool=\(request.toolName) type=\(request.requestType) id=\(request.id) toolUseId=\(request.toolUseId)")
         if let inputKeys = (request.toolInput as NSDictionary).allKeys as? [String] {
             debugLog("  input_keys=\(inputKeys)")
-        }
-
-        // Learn TTY mapping from this session
-        if let tty = request.tty, !tty.isEmpty, !request.sessionId.isEmpty {
-            sessionTtyMap[request.sessionId] = tty
-            trimSessionTtyMap()
         }
 
         // Race condition fix: if this request was already cancelled before enqueue, skip it
@@ -118,13 +89,6 @@ final class ApproverViewModel {
                 await server.resolve(requestId: request.id, decision: .allow)
             }
             return
-        }
-
-        // A new permission request means the turn is still active — reset debounce
-        // so we don't flush completions mid-turn.
-        if !pendingCompletions.isEmpty {
-            debugLog("  resetting completion debounce (turn still active)")
-            scheduleCompletionFlush()
         }
 
         queue.enqueue(request)
@@ -249,164 +213,22 @@ final class ApproverViewModel {
         updateAppDelegate()
     }
 
-    // MARK: - Completion Handling
-
-    private func handleCompletion(_ info: CompletionInfo) {
-        debugLog("handleCompletion: tool=\(info.toolName) toolUseId=\(info.toolUseId) isError=\(info.isError)")
-
-        // Safety net: clean up stale requests with the same toolUseId.
-        // If a completion arrives but the request is still in the queue, it means
-        // the terminal handled it (e.g. AskUserQuestion answered in terminal).
-        if !info.toolUseId.isEmpty,
-           let staleRequest = queue.items.first(where: { $0.toolUseId == info.toolUseId }) {
-            debugLog("  cleaning up stale request: id=\(staleRequest.id)")
-            _ = queue.dequeue(id: staleRequest.id)
-            notificationService.removeDelivered(requestId: staleRequest.id)
-            // Continuation may already be gone (hook exited), but attempt to release it
-            Task { await server.resolve(requestId: staleRequest.id, decision: .deny) }
-            updateAppDelegate()
-        }
-
-        // Resolve TTY from sessionTtyMap if missing
-        let resolvedInfo: CompletionInfo
-        if (info.tty == nil || info.tty?.isEmpty == true),
-           let mappedTty = sessionTtyMap[info.sessionId] {
-            resolvedInfo = CompletionInfo(
-                toolName: info.toolName,
-                toolUseId: info.toolUseId,
-                sessionId: info.sessionId,
-                tty: mappedTty,
-                cwd: info.cwd,
-                resultSummary: info.resultSummary,
-                isError: info.isError
-            )
-        } else {
-            resolvedInfo = info
-        }
-
-        debugLog("  buffering completion (tty=\(resolvedInfo.tty ?? "nil"), pending=\(pendingCompletions.count + 1))")
-        pendingCompletions.append(resolvedInfo)
-        scheduleCompletionFlush()
-    }
-
-    // MARK: - Completion Debounce
-
-    /// Reset the debounce timer. After 3s of silence, flush pending completions.
-    private func scheduleCompletionFlush() {
-        completionDebounceTask?.cancel()
-        completionDebounceTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.completionDebounceSeconds * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            self?.flushPendingCompletions()
-        }
-    }
-
-    /// Collapse buffered completions into a single UI entry per session.
-    /// First flush → create card + notification. Subsequent flushes → silently update card.
-    private func flushPendingCompletions() {
-        guard !pendingCompletions.isEmpty else { return }
-        let batch = pendingCompletions
-        pendingCompletions.removeAll()
-        completionDebounceTask = nil
-
-        // Group by session
-        let grouped = Dictionary(grouping: batch, by: \.sessionId)
-        for (sessionId, items) in grouped {
-            let allForSession = accumulatedToolCounts[sessionId, default: 0] + items.count
-            accumulatedToolCounts[sessionId] = allForSession
-
-            let hasError = items.contains { $0.isError }
-            let lastInfo = items.last!
-
-            // Check if a card already exists for this session
-            let isUpdate = completions.contains { $0.sessionId == sessionId }
-
-            if isUpdate {
-                // Update existing card in-place (no new notification)
-                if let idx = completions.lastIndex(where: { $0.sessionId == sessionId }) {
-                    completions[idx] = CompletionInfo(
-                        toolName: lastInfo.toolName,
-                        toolUseId: lastInfo.toolUseId,
-                        sessionId: sessionId,
-                        tty: lastInfo.tty,
-                        cwd: lastInfo.cwd,
-                        resultSummary: "\(allForSession) tools completed",
-                        isError: hasError || completions[idx].isError
-                    )
-                    debugLog("flushPendingCompletions: updated card session=\(sessionId.prefix(8)) total=\(allForSession)")
-                }
-            } else {
-                // Create new card + send notification
-                let summary: CompletionInfo
-                if allForSession == 1 {
-                    summary = lastInfo
-                } else {
-                    summary = CompletionInfo(
-                        toolName: lastInfo.toolName,
-                        toolUseId: lastInfo.toolUseId,
-                        sessionId: sessionId,
-                        tty: lastInfo.tty,
-                        cwd: lastInfo.cwd,
-                        resultSummary: "\(allForSession) tools completed",
-                        isError: hasError
-                    )
-                }
-                debugLog("flushPendingCompletions: new card session=\(sessionId.prefix(8)) total=\(allForSession)")
-                completions.append(summary)
-                notificationService.notifyCompletion(info: summary)
-
-                if let delegate = AppDelegate.shared {
-                    delegate.showPopover()
-                    delegate.bounceButton()
-                }
-            }
-        }
-        updateBadge()
-    }
-
-    /// Dismiss a completion item from the UI
-    func dismissCompletion(id: UUID) {
-        if let item = completions.first(where: { $0.id == id }) {
-            accumulatedToolCounts.removeValue(forKey: item.sessionId)
-        }
-        completions.removeAll { $0.id == id }
-        updateAppDelegate()
-    }
-
-    /// Go to terminal and dismiss the completion
-    func goToTerminal(completionId: UUID) {
-        if let item = completions.first(where: { $0.id == completionId }) {
-            accumulatedToolCounts.removeValue(forKey: item.sessionId)
-        }
-        let tty = completions.first(where: { $0.id == completionId })?.tty
-        completions.removeAll { $0.id == completionId }
-
-        // Activate terminal FIRST, then close popover to avoid macOS restoring
-        // focus to the previously-active app (e.g. Slack) during orderOut.
-        TerminalNavigator.navigate(tty: tty)
-        if let delegate = AppDelegate.shared {
-            delegate.closePopover()
-        }
-
-        updateAppDelegate()
-    }
-
     // MARK: - Badge
 
     private func updateAppDelegate() {
         guard let delegate = AppDelegate.shared else { return }
         updateBadge()
 
-        // Auto-close popover when all requests and completions have been handled
+        // Auto-close popover when all requests have been handled
         // (skip in demo mode — user is taking screenshots)
-        if queue.isEmpty && completions.isEmpty && !isDemoMode {
+        if queue.isEmpty && !isDemoMode {
             delegate.closePopover()
         }
     }
 
     private func updateBadge() {
         guard let delegate = AppDelegate.shared else { return }
-        delegate.updateBadge(count: queue.count + completions.count)
+        delegate.updateBadge(count: queue.count)
     }
 
     // MARK: - Auto-Approve Helpers
@@ -420,14 +242,6 @@ final class ApproverViewModel {
     private func trimAutoApproveEditSessions() {
         if autoApproveEditSessions.count > 50 {
             autoApproveEditSessions.removeAll()
-        }
-    }
-
-    // MARK: - Session TTY Map
-
-    private func trimSessionTtyMap() {
-        if sessionTtyMap.count > 100 {
-            sessionTtyMap.removeAll()
         }
     }
 
@@ -463,7 +277,4 @@ extension SocketServer {
         self.onCancel = handler
     }
 
-    func setOnCompletion(_ handler: @escaping @Sendable (CompletionInfo) -> Void) {
-        self.onCompletion = handler
-    }
 }

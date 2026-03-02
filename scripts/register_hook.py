@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Register ClaudeApprover hooks in ~/.claude/settings.json.
-Registers both PermissionRequest and PostToolUse hooks.
+Registers the PermissionRequest hook.
 Idempotent: safe to run multiple times.
 Also migrates from the old PreToolUse registration if present.
 """
@@ -15,9 +15,6 @@ SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 PERM_HOOK_COMMAND = "python3 ~/.claude/claude-approver/hook/permission_request.py"
 PERM_HOOK_TIMEOUT = 310  # 5 min socket timeout + 10s margin
 
-POST_HOOK_COMMAND = "python3 ~/.claude/claude-approver/hook/post_tool_use.py"
-POST_HOOK_TIMEOUT = 10  # fire-and-forget, short timeout
-
 PERM_HOOK_ENTRY = {
     "matcher": ".*",
     "hooks": [
@@ -28,18 +25,6 @@ PERM_HOOK_ENTRY = {
         }
     ],
 }
-
-POST_HOOK_ENTRY = {
-    "matcher": ".*",
-    "hooks": [
-        {
-            "type": "command",
-            "command": POST_HOOK_COMMAND,
-            "timeout": POST_HOOK_TIMEOUT,
-        }
-    ],
-}
-
 
 def _is_registered(hook_list: list, script_name: str) -> bool:
     """Check if a hook with the given script name is already registered."""
@@ -88,18 +73,6 @@ def main():
         print(f"  matcher: .*")
         print(f"  command: {PERM_HOOK_COMMAND}")
         print(f"  timeout: {PERM_HOOK_TIMEOUT}s")
-
-    # Register PostToolUse hook
-    post_tool_use = hooks.setdefault("PostToolUse", [])
-    if _is_registered(post_tool_use, "post_tool_use.py"):
-        print("PostToolUse hook already registered. Skipping.")
-    else:
-        post_tool_use.insert(0, POST_HOOK_ENTRY)
-        changed = True
-        print("PostToolUse hook registered.")
-        print(f"  matcher: .*")
-        print(f"  command: {POST_HOOK_COMMAND}")
-        print(f"  timeout: {POST_HOOK_TIMEOUT}s")
 
     if changed:
         with open(SETTINGS_PATH, "w") as f:

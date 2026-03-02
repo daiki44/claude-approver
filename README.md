@@ -5,7 +5,6 @@
 A macOS menu bar app that replaces Claude Code's terminal permission dialogs with a native SwiftUI popover. Instead of switching to your terminal every time Claude Code needs approval, you get a clean GUI right from the menu bar.
 
 <p align="center">
-  <img src="docs/screenshots/permissions-and-completions.png" width="360" alt="Permission requests and completion tracking" />
   <img src="docs/screenshots/questions-and-plans.png" width="360" alt="Questions and plan approvals" />
 </p>
 
@@ -24,7 +23,6 @@ Claude Code  <──(hook)──  Python script  <──(UDS)──  DecisionRes
 2. A Python hook script reads the request from stdin and forwards it over a Unix Domain Socket
 3. The SwiftUI menu bar app displays the request in a popover
 4. You approve or deny; the response flows back through the same path
-5. A `PostToolUse` hook sends completion events so you can see results in the popover
 
 **Fail-open design** — if the app isn't running or anything goes wrong, the hook exits with code 1 and Claude Code falls back to its normal terminal dialog. You never get stuck.
 
@@ -33,7 +31,6 @@ Claude Code  <──(hook)──  Python script  <──(UDS)──  DecisionRes
 - **Menu bar popover** — review permission requests without leaving your current window
 - **Three request types** — tool permissions (Bash, MCP, etc.), questions (AskUserQuestion), and plan approvals (ExitPlanMode)
 - **Risk indicators** — high/medium/low risk labels based on command heuristics
-- **Completion tracking** — see tool results after approval with Go to Terminal button
 - **Always Allow** — grant persistent permissions using Claude Code's `updatedPermissions` API
 - **Passthrough** — dismiss requests to let Claude Code handle them in terminal
 - **macOS notifications** — get notified even when focused on other apps
@@ -103,7 +100,6 @@ ClaudeApprover/
       DecisionResponse.swift       # Allow/deny/passthrough response
       RequestType.swift            # toolPermission | question | planApproval
       RequestQueue.swift           # FIFO queue of pending requests
-      CompletionInfo.swift         # Tool completion event from PostToolUse
     ViewModels/
       ApproverViewModel.swift      # @Observable @MainActor, owns server + queue
     Views/
@@ -113,7 +109,6 @@ ClaudeApprover/
       ToolPermissionRowView.swift  # Bash/MCP/Write permission card
       QuestionRowView.swift        # AskUserQuestion with text input
       PlanApprovalRowView.swift    # Plan review with approval modes
-      CompletionRowView.swift      # Tool result card with Go to Terminal
       SharedHeaderView.swift       # Reusable row header component
       EmptyStateView.swift         # Shown when queue is empty
     Services/
@@ -122,7 +117,6 @@ ClaudeApprover/
 
 hook/
   permission_request.py            # PermissionRequest hook (stdin → UDS → stdout)
-  post_tool_use.py                 # PostToolUse hook (fire-and-forget)
 scripts/
   register_hook.py                 # Add hooks to ~/.claude/settings.json
   unregister_hook.py               # Remove hooks
@@ -162,19 +156,6 @@ Communication uses a Unix Domain Socket at:
   "request_id": "uuid",
   "message": null,
   "updated_permissions": null
-}
-```
-
-### Completion Event (PostToolUse hook → app)
-
-```json
-{
-  "type": "completion",
-  "tool_name": "Bash",
-  "tool_use_id": "toolu_xxx",
-  "session_id": "session-id",
-  "result_summary": "Exit 0: success",
-  "is_error": false
 }
 ```
 

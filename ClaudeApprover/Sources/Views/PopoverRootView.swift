@@ -5,7 +5,7 @@ struct PopoverRootView: View {
     let viewModel: ApproverViewModel
 
     var body: some View {
-        let hasContent = !viewModel.queue.isEmpty || !viewModel.completions.isEmpty
+        let hasContent = !viewModel.queue.isEmpty
 
         VStack(spacing: 0) {
             // Header

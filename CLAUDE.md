@@ -15,7 +15,7 @@ Claude Code  <──(hook)──  Python script  <──(UDS)──  DecisionRes
 ```
 
 Three layers:
-1. **Claude Code** — fires `PermissionRequest` / `PostToolUse` hooks
+1. **Claude Code** — fires `PermissionRequest` hooks
 2. **Python hooks** (`hook/`) — stdin JSON → UDS → stdout JSON; exit 0 = handled, exit 1 = passthrough
 3. **Swift app** (`ClaudeApprover/`) — menu bar popover UI, `SocketServer` actor, MVVM
 
@@ -27,7 +27,6 @@ Protocol: 4-byte big-endian uint32 length header + UTF-8 JSON body
 - **Fail-open**: hook errors → exit 1 → Claude Code shows its normal terminal dialog
 - **Passthrough**: closing the socket without response → hook gets EOF → exit 1
 - **earlyCancelledIds**: handles race condition where cancel arrives before enqueue
-- **toolUseId correlation**: PostToolUse completion events matched to approved requests
 - **RequestType**: `toolPermission` (Bash, MCP, etc.), `question` (AskUserQuestion), `planApproval` (ExitPlanMode)
 
 ## Build & Install
@@ -57,7 +56,6 @@ ClaudeApprover/
       DecisionResponse.swift
       RequestType.swift
       RequestQueue.swift
-      CompletionInfo.swift
     ViewModels/
       ApproverViewModel.swift  # @Observable @MainActor, owns SocketServer
     Views/
@@ -67,7 +65,6 @@ ClaudeApprover/
       ToolPermissionRowView.swift
       QuestionRowView.swift
       PlanApprovalRowView.swift
-      CompletionRowView.swift
       SharedHeaderView.swift
       EmptyStateView.swift
     Services/
@@ -75,7 +72,6 @@ ClaudeApprover/
       NotificationService.swift
 hook/
   permission_request.py   # PermissionRequest hook (timeout 300s)
-  post_tool_use.py        # PostToolUse hook (fire-and-forget, 5s timeout)
 scripts/
   register_hook.py        # Add hooks to ~/.claude/settings.json
   unregister_hook.py      # Remove hooks
@@ -118,15 +114,3 @@ Makefile
 }
 ```
 
-### Completion Event (PostToolUse hook → app)
-
-```json
-{
-  "type": "completion",
-  "tool_name": "Bash",
-  "tool_use_id": "toolu_xxx",
-  "session_id": "...",
-  "result_summary": "Exit 0: ...",
-  "is_error": false
-}
-```

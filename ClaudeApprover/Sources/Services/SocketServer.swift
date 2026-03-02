@@ -20,9 +20,6 @@ actor SocketServer {
     /// Callback when a request is cancelled (hook script died / terminal handled it)
     var onCancel: (@Sendable (UUID) -> Void)?
 
-    /// Callback when a tool completion event arrives
-    var onCompletion: (@Sendable (CompletionInfo) -> Void)?
-
     init() {
         let supportDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/ClaudeApprover")
@@ -181,13 +178,6 @@ actor SocketServer {
               let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
         else { return }
 
-        // Route by message type
-        let messageType = json["type"] as? String ?? "permission_request"
-        if messageType == "completion" {
-            handleCompletionMessage(fd: fd, json: json)
-            return
-        }
-
         // Permission request flow: requires request_id
         guard let requestIdStr = json["request_id"] as? String,
               let requestId = UUID(uuidString: requestIdStr)
@@ -325,33 +315,6 @@ actor SocketServer {
         _ = responseData.withUnsafeBytes { ptr in
             Darwin.send(fd, ptr.baseAddress!, responseData.count, 0)
         }
-    }
-
-    // MARK: - Completion Handling (runs on GCD, NOT on actor)
-
-    nonisolated private func handleCompletionMessage(fd: Int32, json: [String: Any]) {
-        let info = CompletionInfo(
-            toolName: json["tool_name"] as? String ?? "Unknown",
-            toolUseId: json["tool_use_id"] as? String ?? "",
-            sessionId: json["session_id"] as? String ?? "",
-            tty: json["tty"] as? String,
-            cwd: json["cwd"] as? String ?? "",
-            resultSummary: json["result_summary"] as? String ?? "",
-            isError: json["is_error"] as? Bool ?? false
-        )
-
-        // Fire callback (async to actor)
-        Task { [weak self] in
-            await self?.onCompletion?(info)
-        }
-
-        // Send immediate ACK
-        let ack: [String: Any] = ["status": "ok"]
-        guard let ackData = try? JSONSerialization.data(withJSONObject: ack) else { return }
-        var ackLen = UInt32(ackData.count).bigEndian
-        let ackHeader = Data(bytes: &ackLen, count: 4)
-        _ = ackHeader.withUnsafeBytes { Darwin.send(fd, $0.baseAddress!, 4, 0) }
-        _ = ackData.withUnsafeBytes { Darwin.send(fd, $0.baseAddress!, ackData.count, 0) }
     }
 
     // MARK: - Debug Logging
