@@ -17,12 +17,6 @@ final class ApproverViewModel {
     /// Tracks request IDs that were cancelled before being enqueued (race condition fix)
     private var earlyCancelledIds: Set<UUID> = []
 
-    /// Tracks toolUseIds of approved requests for completion notifications
-    private var approvedToolUseIds: Set<String> = []
-
-    /// Session ID to TTY mapping (learned from permission requests)
-    private var sessionTtyMap: [String: String] = [:]
-
     /// Sessions where user enabled "Auto-approve file edits" (acceptEdits mode).
     /// Workaround for Claude Code race condition: when mode switch via updatedPermissions
     /// hasn't been applied before the next Edit/Write permission check fires.
@@ -30,9 +24,6 @@ final class ApproverViewModel {
 
     /// Tool names that are auto-approved in acceptEdits mode
     private static let editToolNames: Set<String> = ["Edit", "Write", "NotebookEdit"]
-
-    /// Recently completed tools (shown in UI)
-    private(set) var completions: [CompletionInfo] = []
 
     func start() async {
         notificationService.requestAuthorization()
@@ -54,15 +45,6 @@ final class ApproverViewModel {
             }
         }
 
-        // Wire up the server's onCompletion callback.
-        // Fires when a PostToolUse hook reports tool completion.
-        await server.setOnCompletion { [weak self] info in
-            let vm = self
-            Task { @MainActor in
-                vm?.handleCompletion(info)
-            }
-        }
-
         do {
             try await server.start()
         } catch {
@@ -76,7 +58,6 @@ final class ApproverViewModel {
         for request in DemoDataProvider.mockRequests() {
             queue.enqueue(request)
         }
-        completions = DemoDataProvider.mockCompletions()
     }
 
     func shutdown() async {
@@ -89,12 +70,6 @@ final class ApproverViewModel {
         debugLog("handleIncomingRequest: tool=\(request.toolName) type=\(request.requestType) id=\(request.id) toolUseId=\(request.toolUseId)")
         if let inputKeys = (request.toolInput as NSDictionary).allKeys as? [String] {
             debugLog("  input_keys=\(inputKeys)")
-        }
-
-        // Learn TTY mapping from this session
-        if let tty = request.tty, !tty.isEmpty, !request.sessionId.isEmpty {
-            sessionTtyMap[request.sessionId] = tty
-            trimSessionTtyMap()
         }
 
         // Race condition fix: if this request was already cancelled before enqueue, skip it
@@ -110,9 +85,6 @@ final class ApproverViewModel {
            request.requestType == .toolPermission,
            Self.editToolNames.contains(request.toolName) {
             debugLog("  auto-approved: tool=\(request.toolName) session=\(request.shortSessionId) (acceptEdits mode active)")
-            if !request.toolUseId.isEmpty {
-                approvedToolUseIds.insert(request.toolUseId)
-            }
             Task {
                 await server.resolve(requestId: request.id, decision: .allow)
             }
@@ -233,12 +205,6 @@ final class ApproverViewModel {
         debugLog("resolveRequest: id=\(requestId) behavior=\(decision.behavior) toolUseId='\(request.toolUseId)'")
         notificationService.removeDelivered(requestId: requestId)
 
-        // Track approved requests for completion notifications
-        if decision.behavior == "allow", !request.toolUseId.isEmpty {
-            approvedToolUseIds.insert(request.toolUseId)
-            debugLog("  tracking toolUseId=\(request.toolUseId) for completion (total=\(approvedToolUseIds.count))")
-        }
-
         if !isDemoMode {
             Task {
                 await server.resolve(requestId: requestId, decision: decision)
@@ -247,90 +213,22 @@ final class ApproverViewModel {
         updateAppDelegate()
     }
 
-    // MARK: - Completion Handling
-
-    private func handleCompletion(_ info: CompletionInfo) {
-        debugLog("handleCompletion: tool=\(info.toolName) toolUseId=\(info.toolUseId) isError=\(info.isError)")
-
-        // Safety net: clean up stale requests with the same toolUseId.
-        // If a completion arrives but the request is still in the queue, it means
-        // the terminal handled it (e.g. AskUserQuestion answered in terminal).
-        if !info.toolUseId.isEmpty,
-           let staleRequest = queue.items.first(where: { $0.toolUseId == info.toolUseId }) {
-            debugLog("  cleaning up stale request: id=\(staleRequest.id)")
-            _ = queue.dequeue(id: staleRequest.id)
-            notificationService.removeDelivered(requestId: staleRequest.id)
-            // Continuation may already be gone (hook exited), but attempt to release it
-            Task { await server.resolve(requestId: staleRequest.id, decision: .deny) }
-            updateAppDelegate()
-        }
-
-        // Only notify for tools that were approved via the Approver
-        guard approvedToolUseIds.remove(info.toolUseId) != nil else {
-            debugLog("  skipped: toolUseId not tracked")
-            return
-        }
-
-        // Resolve TTY from sessionTtyMap if missing
-        let resolvedInfo: CompletionInfo
-        if (info.tty == nil || info.tty?.isEmpty == true),
-           let mappedTty = sessionTtyMap[info.sessionId] {
-            resolvedInfo = CompletionInfo(
-                toolName: info.toolName,
-                toolUseId: info.toolUseId,
-                sessionId: info.sessionId,
-                tty: mappedTty,
-                cwd: info.cwd,
-                resultSummary: info.resultSummary,
-                isError: info.isError
-            )
-        } else {
-            resolvedInfo = info
-        }
-
-        debugLog("  showing completion in UI (tty=\(resolvedInfo.tty ?? "nil"))")
-        completions.append(resolvedInfo)
-        notificationService.notifyCompletion(info: resolvedInfo)
-
-        // Only show popover for completion if there are pending requests
-        // (don't reopen a closed popover just for informational completions)
-        if !queue.isEmpty, let delegate = AppDelegate.shared {
-            delegate.bounceButton()
-        }
-    }
-
-    /// Dismiss a completion item from the UI
-    func dismissCompletion(id: UUID) {
-        completions.removeAll { $0.id == id }
-        updateAppDelegate()
-    }
-
-    /// Go to terminal and dismiss the completion
-    func goToTerminal(completionId: UUID) {
-        let tty = completions.first(where: { $0.id == completionId })?.tty
-        completions.removeAll { $0.id == completionId }
-
-        // Activate terminal FIRST, then close popover to avoid macOS restoring
-        // focus to the previously-active app (e.g. Slack) during orderOut.
-        TerminalNavigator.navigate(tty: tty)
-        if let delegate = AppDelegate.shared {
-            delegate.closePopover()
-        }
-
-        updateAppDelegate()
-    }
-
     // MARK: - Badge
 
     private func updateAppDelegate() {
         guard let delegate = AppDelegate.shared else { return }
-        delegate.updateBadge(count: queue.count)
+        updateBadge()
 
         // Auto-close popover when all requests have been handled
         // (skip in demo mode — user is taking screenshots)
         if queue.isEmpty && !isDemoMode {
             delegate.closePopover()
         }
+    }
+
+    private func updateBadge() {
+        guard let delegate = AppDelegate.shared else { return }
+        delegate.updateBadge(count: queue.count)
     }
 
     // MARK: - Auto-Approve Helpers
@@ -344,14 +242,6 @@ final class ApproverViewModel {
     private func trimAutoApproveEditSessions() {
         if autoApproveEditSessions.count > 50 {
             autoApproveEditSessions.removeAll()
-        }
-    }
-
-    // MARK: - Session TTY Map
-
-    private func trimSessionTtyMap() {
-        if sessionTtyMap.count > 100 {
-            sessionTtyMap.removeAll()
         }
     }
 
@@ -387,7 +277,4 @@ extension SocketServer {
         self.onCancel = handler
     }
 
-    func setOnCompletion(_ handler: @escaping @Sendable (CompletionInfo) -> Void) {
-        self.onCompletion = handler
-    }
 }

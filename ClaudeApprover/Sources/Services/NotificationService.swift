@@ -41,23 +41,13 @@ final class NotificationService: NSObject, @unchecked Sendable {
             self?.writeLog("Authorization result: granted=\(granted)")
         }
 
-        // Register notification categories with actions
-        let openTerminalAction = UNNotificationAction(
-            identifier: "OPEN_TERMINAL",
-            title: "Open Terminal",
-            options: .foreground
-        )
-        let completionCategory = UNNotificationCategory(
-            identifier: "TOOL_COMPLETION",
-            actions: [openTerminalAction],
-            intentIdentifiers: []
-        )
+        // Register notification categories
         let permissionCategory = UNNotificationCategory(
             identifier: "PERMISSION_REQUEST",
             actions: [],
             intentIdentifiers: []
         )
-        center?.setNotificationCategories([completionCategory, permissionCategory])
+        center?.setNotificationCategories([permissionCategory])
     }
 
     /// Remove all delivered notification banners from Notification Center.
@@ -110,43 +100,6 @@ final class NotificationService: NSObject, @unchecked Sendable {
         }
     }
 
-    func notifyCompletion(info: CompletionInfo) {
-        guard let center else {
-            writeLog("notifyCompletion: center is nil, skipping for \(info.toolName)")
-            return
-        }
-
-        let content = UNMutableNotificationContent()
-        content.title = info.isError ? "Tool Failed" : "Tool Completed"
-        content.subtitle = info.toolName
-        content.body = info.resultSummary.isEmpty
-            ? (info.isError ? "Error occurred" : "Completed successfully")
-            : String(info.resultSummary.prefix(200))
-        content.sound = .default
-        content.categoryIdentifier = "TOOL_COMPLETION"
-
-        // Store TTY in userInfo for terminal tab navigation on click
-        var userInfo: [String: String] = [:]
-        if let tty = info.tty, !tty.isEmpty {
-            userInfo["tty"] = tty
-        }
-        content.userInfo = userInfo
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
-        let notifRequest = UNNotificationRequest(
-            identifier: "completion-\(info.toolUseId)",
-            content: content,
-            trigger: trigger
-        )
-        center.add(notifRequest) { [weak self] error in
-            if let error {
-                self?.writeLog("Failed to add completion notification: \(error.localizedDescription)")
-            } else {
-                self?.writeLog("Completion notification added for \(info.toolName)")
-            }
-        }
-    }
-
     // MARK: - File-based logging
 
     private func writeLog(_ message: String) {
@@ -195,23 +148,10 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        let categoryId = response.notification.request.content.categoryIdentifier
-        let actionId = response.actionIdentifier
-        let userInfo = response.notification.request.content.userInfo
-
-        if categoryId == "TOOL_COMPLETION"
-            || actionId == "OPEN_TERMINAL"
-            || (categoryId == "TOOL_COMPLETION" && actionId == UNNotificationDefaultActionIdentifier) {
-            let tty = userInfo["tty"] as? String
-            await MainActor.run {
-                TerminalNavigator.navigate(tty: tty)
-            }
-        } else {
-            // Permission request notification — activate Approver
-            await MainActor.run {
-                if let delegate = AppDelegate.shared {
-                    delegate.showPopover()
-                }
+        // Permission request notification — activate Approver
+        await MainActor.run {
+            if let delegate = AppDelegate.shared {
+                delegate.showPopover()
             }
         }
     }

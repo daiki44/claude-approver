@@ -112,30 +112,4 @@ enum DemoDataProvider {
         ]
     }
 
-    /// 完了イベントのモック（成功 + エラー）
-    static func mockCompletions() -> [CompletionInfo] {
-        let sessionId = "demo-session-abc12345"
-        let cwd = FileManager.default.homeDirectoryForCurrentUser.path + "/projects/my-app"
-
-        return [
-            CompletionInfo(
-                toolName: "Bash",
-                toolUseId: "toolu_demo_done_001",
-                sessionId: sessionId,
-                tty: nil,
-                cwd: cwd,
-                resultSummary: "Exit 0: src/  package.json  tsconfig.json  README.md",
-                isError: false
-            ),
-            CompletionInfo(
-                toolName: "Bash",
-                toolUseId: "toolu_demo_done_002",
-                sessionId: sessionId,
-                tty: nil,
-                cwd: cwd,
-                resultSummary: "Exit 1: error TS2304: Cannot find name 'useState'",
-                isError: true
-            ),
-        ]
-    }
 }

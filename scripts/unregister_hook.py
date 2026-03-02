@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unregister ClaudeApprover hooks from ~/.claude/settings.json.
-Removes PermissionRequest, PostToolUse, and PreToolUse (legacy) entries.
+Removes PermissionRequest and PreToolUse (legacy) entries.
 """
 
 import json
@@ -49,9 +49,6 @@ def main():
 
     # Remove from PermissionRequest
     total_removed += _clean_hook_section(hooks, "PermissionRequest", "permission_request.py")
-
-    # Remove from PostToolUse
-    total_removed += _clean_hook_section(hooks, "PostToolUse", "post_tool_use.py")
 
     # Remove from PreToolUse (legacy)
     total_removed += _clean_hook_section(hooks, "PreToolUse", "permission_request.py")
