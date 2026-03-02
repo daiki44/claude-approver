@@ -105,13 +105,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSSound.beep()
     }
 
-    /// Briefly highlight the status bar button for visual attention
+    /// Briefly highlight the status bar button for visual attention.
+    /// Cancels any in-flight animation to prevent flicker from parallel calls.
+    private var bounceWorkItem: DispatchWorkItem?
+
     func bounceButton() {
         guard let button = statusItem.button else { return }
+        bounceWorkItem?.cancel()
         button.highlight(true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            button.highlight(false)
+        let item = DispatchWorkItem { [weak button] in
+            button?.highlight(false)
         }
+        bounceWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: item)
     }
 
     /// Update the menu bar icon badge when queue changes

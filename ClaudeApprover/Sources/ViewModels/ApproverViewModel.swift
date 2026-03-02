@@ -132,9 +132,8 @@ final class ApproverViewModel {
         }
 
         // Send notification AFTER popover is shown — banners suppressed by willPresent
+        // when app is active. When app is inactive, banners are delivered normally.
         notificationService.notify(request: request)
-        // Remove any lingering banners from earlier notifications
-        notificationService.removeAllDelivered()
 
         updateAppDelegate()
     }
