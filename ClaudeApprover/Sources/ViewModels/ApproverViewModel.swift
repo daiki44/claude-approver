@@ -313,11 +313,12 @@ final class ApproverViewModel {
         completions.append(resolvedInfo)
         notificationService.notifyCompletion(info: resolvedInfo)
 
-        // Only show popover for completion if there are pending requests
-        // (don't reopen a closed popover just for informational completions)
-        if !queue.isEmpty, let delegate = AppDelegate.shared {
+        // Show popover and update badge for completion
+        if let delegate = AppDelegate.shared {
+            delegate.showPopover()
             delegate.bounceButton()
         }
+        updateBadge()
     }
 
     /// Dismiss a completion item from the UI
@@ -345,13 +346,18 @@ final class ApproverViewModel {
 
     private func updateAppDelegate() {
         guard let delegate = AppDelegate.shared else { return }
-        delegate.updateBadge(count: queue.count)
+        updateBadge()
 
-        // Auto-close popover when all requests have been handled
+        // Auto-close popover when all requests and completions have been handled
         // (skip in demo mode — user is taking screenshots)
-        if queue.isEmpty && !isDemoMode {
+        if queue.isEmpty && completions.isEmpty && !isDemoMode {
             delegate.closePopover()
         }
+    }
+
+    private func updateBadge() {
+        guard let delegate = AppDelegate.shared else { return }
+        delegate.updateBadge(count: queue.count + completions.count)
     }
 
     // MARK: - Auto-Approve Helpers
