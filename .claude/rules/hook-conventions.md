@@ -53,6 +53,31 @@ PermissionRequest hooks must return this structure:
 - Python 3 standard library only (json, socket, struct, sys, uuid, pathlib, datetime)
 - No pip dependencies — hooks must work on any macOS with Python 3
 
+## Agent Detection
+
+エージェント経由の実行（サブエージェント・バックグラウンドエージェント）を判別し、自動承認する:
+
+```python
+def _is_agent(hook_input: dict) -> bool:
+    if "/subagents/" in hook_input.get("transcript_path", ""):
+        return True
+    if "agent_id" in hook_input:
+        return True
+    return False
+```
+
+判別方法（OR 条件）:
+1. `transcript_path` に `/subagents/` を含む → 同期サブエージェント
+2. `hook_input` に `agent_id` フィールドが存在 → バックグラウンドエージェント等
+
+transcript_path のパターン:
+- メイン: `~/.claude/projects/.../session.jsonl`
+- 同期サブ: `~/.claude/projects/.../session/subagents/agent-xxx.jsonl`
+- バックグラウンド: `~/.claude/projects/.../session.jsonl`（メインと同形式だが `agent_id` あり）
+
+- エージェントの PermissionRequest は Socket 送信前に自動承認（exit 0）
+- `transcript_path` が空/未設定かつ `agent_id` なし → GUI に送信（fail-open）
+
 ## File Structure
 
 | File | Hook Event | Purpose |

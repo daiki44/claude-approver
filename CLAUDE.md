@@ -29,6 +29,19 @@ Protocol: 4-byte big-endian uint32 length header + UTF-8 JSON body
 - **earlyCancelledIds**: handles race condition where cancel arrives before enqueue
 - **RequestType**: `toolPermission` (Bash, MCP, etc.), `question` (AskUserQuestion), `planApproval` (ExitPlanMode)
 
+## Agent Auto-Approve
+
+Agent tool 経由のエージェント（同期サブエージェント・バックグラウンドエージェント）からの
+PermissionRequest は Python hook 内で自動承認される。GUI に表示せずノイズを排除する。
+
+判別方法（OR 条件）:
+1. `hook_input["transcript_path"]` に `/subagents/` が含まれる → 同期サブエージェント
+2. `hook_input` に `agent_id` フィールドが存在する → バックグラウンドエージェント等
+
+- メインセッション（`agent_id` なし）: GUI に送信
+- エージェント（`agent_id` あり or `/subagents/` パス）: 自動承認
+- `transcript_path` が空/未設定かつ `agent_id` なし → GUI に送信（fail-open）
+
 ## Build & Install
 
 ```bash

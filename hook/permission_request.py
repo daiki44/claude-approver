@@ -43,6 +43,18 @@ def _debug_log(msg: str):
         pass
 
 
+def _is_agent(hook_input: dict) -> bool:
+    """エージェント経由の実行かどうかを判別。
+    - 同期サブエージェント: transcript_path に /subagents/ を含む
+    - バックグラウンドエージェント等: agent_id フィールドが存在する
+    """
+    if "/subagents/" in hook_input.get("transcript_path", ""):
+        return True
+    if "agent_id" in hook_input:
+        return True
+    return False
+
+
 def _send_request(request: dict) -> dict | None:
     """
     Unix Socket 経由で ClaudeApprover.app にリクエストを送信し、
@@ -109,8 +121,23 @@ def main():
 
         tool_use_id = hook_input.get("tool_use_id", "")
         permission_suggestions_raw = hook_input.get("permission_suggestions", [])
-        _debug_log(f"PermissionRequest: tool={tool_name} tool_use_id={tool_use_id} input_keys={list(tool_input.keys())} hook_keys={list(hook_input.keys())}")
+        transcript_path = hook_input.get("transcript_path", "")
+        agent_mode = _is_agent(hook_input)
+        _debug_log(f"PermissionRequest: tool={tool_name} transcript_path={transcript_path} is_agent={agent_mode}")
+        _debug_log(f"  tool_use_id={tool_use_id} input_keys={list(tool_input.keys())} hook_keys={list(hook_input.keys())}")
         _debug_log(f"  permission_suggestions={json.dumps(permission_suggestions_raw, default=str)}")
+
+        # Agent auto-approve: parent already authorized the agent spawn
+        if agent_mode:
+            _debug_log(f"  agent auto-approve: tool={tool_name} transcript={transcript_path} agent_id={hook_input.get('agent_id', '')}")
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PermissionRequest",
+                    "decision": {"behavior": "allow"},
+                }
+            }
+            print(json.dumps(output))
+            sys.exit(0)
 
         # PermissionRequest only fires when Claude Code is about to show
         # a permission dialog — no need to check allow/deny lists.
