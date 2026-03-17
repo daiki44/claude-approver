@@ -7,6 +7,7 @@ struct PlanApprovalRowView: View {
     let onApproveWithMode: (PlanApprovalMode) -> Void
     let onReject: () -> Void
     let onRejectWithReason: (String) -> Void
+    var onDismiss: (() -> Void)?
 
     @State private var selectedMode: PlanApprovalMode = .clearContextAutoAccept
     @State private var showFeedbackField = false
@@ -14,7 +15,7 @@ struct PlanApprovalRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SharedHeaderView(request: request)
+            SharedHeaderView(request: request, onDismiss: onDismiss)
 
             // Plan content (scrollable)
             VStack(alignment: .leading, spacing: 4) {

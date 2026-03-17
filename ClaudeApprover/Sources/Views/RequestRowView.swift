@@ -17,7 +17,8 @@ struct RequestRowView: View {
                 },
                 onDenyWithMessage: { message in
                     viewModel.denyWithMessage(requestId: request.id, message: message)
-                }
+                },
+                onDismiss: { viewModel.dismiss(requestId: request.id) }
             )
 
         case .question:
@@ -36,7 +37,8 @@ struct RequestRowView: View {
                 onReject: { viewModel.deny(requestId: request.id) },
                 onRejectWithReason: { message in
                     viewModel.denyWithMessage(requestId: request.id, message: message)
-                }
+                },
+                onDismiss: { viewModel.dismiss(requestId: request.id) }
             )
         }
     }

@@ -10,7 +10,7 @@ struct QuestionRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SharedHeaderView(request: request)
+            SharedHeaderView(request: request, onDismiss: onDismiss)
 
             // Question text
             VStack(alignment: .leading, spacing: 6) {

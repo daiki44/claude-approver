@@ -8,6 +8,7 @@ struct ToolPermissionRowView: View {
     let onDeny: () -> Void
     let onAlwaysAllow: ([[String: Any]]) -> Void
     let onDenyWithMessage: (String) -> Void
+    var onDismiss: (() -> Void)?
 
     @State private var showDenyReason = false
     @State private var denyReason = ""
@@ -31,7 +32,7 @@ struct ToolPermissionRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SharedHeaderView(request: request)
+            SharedHeaderView(request: request, onDismiss: onDismiss)
 
             // Risk badge
             HStack {
