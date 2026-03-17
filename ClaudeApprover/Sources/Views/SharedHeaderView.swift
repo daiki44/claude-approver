@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Common header for all request type cards: icon + tool name + type badge + time.
+/// Common header for all request type cards: icon + tool name + type badge + dismiss + time.
 struct SharedHeaderView: View {
     let request: PermissionRequest
+    var onDismiss: (() -> Void)?
 
     private var badgeColor: Color {
         switch request.requestType {
@@ -37,6 +38,18 @@ struct SharedHeaderView: View {
                 Text(request.timeAgo)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+
+                if let onDismiss {
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss (passthrough to terminal)")
+                }
             }
 
             // Row 2: Project path + session ID
