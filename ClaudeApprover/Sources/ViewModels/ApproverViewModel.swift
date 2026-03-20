@@ -202,7 +202,7 @@ final class ApproverViewModel {
 
     private func resolveRequest(requestId: UUID, decision: DecisionResponse) {
         guard let request = queue.dequeue(id: requestId) else { return }
-        debugLog("resolveRequest: id=\(requestId) behavior=\(decision.behavior) toolUseId='\(request.toolUseId)'")
+        debugLog("resolveRequest: id=\(requestId) behavior=\(decision.behavior) message=\(decision.message ?? "nil") toolUseId='\(request.toolUseId)'")
         notificationService.removeDelivered(requestId: requestId)
 
         if !isDemoMode {

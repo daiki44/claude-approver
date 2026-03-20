@@ -177,7 +177,6 @@ def main():
         decision_obj: dict = {"behavior": user_decision}
         if user_decision == "deny" and resp_message:
             decision_obj["message"] = resp_message
-            decision_obj["interrupt"] = False
         if user_decision == "allow" and resp_permissions:
             decision_obj["updatedPermissions"] = resp_permissions
 
