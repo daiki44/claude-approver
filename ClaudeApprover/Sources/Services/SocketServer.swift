@@ -20,6 +20,9 @@ actor SocketServer {
     /// Callback when a request is cancelled (hook script died / terminal handled it)
     var onCancel: (@Sendable (UUID) -> Void)?
 
+    /// Callback when a tool execution completes (PostToolUse hook notification)
+    var onCompletion: (@Sendable (ToolCompletion) -> Void)?
+
     init() {
         let supportDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/ClaudeApprover")
@@ -145,6 +148,10 @@ actor SocketServer {
         onRequest
     }
 
+    func getOnCompletion() -> (@Sendable (ToolCompletion) -> Void)? {
+        onCompletion
+    }
+
     // MARK: - Accept Loop (runs on GCD, NOT on actor)
 
     nonisolated private func acceptLoop(serverFD: Int32) {
@@ -177,6 +184,13 @@ actor SocketServer {
         guard let body = readExact(fd: fd, count: Int(bodyLen)),
               let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
         else { return }
+
+        // Dispatch by message type
+        let messageType = json["type"] as? String
+        if messageType == "completion" {
+            handleCompletionMessage(json)
+            return
+        }
 
         // Permission request flow: requires request_id
         guard let requestIdStr = json["request_id"] as? String,
@@ -317,6 +331,21 @@ actor SocketServer {
         }
     }
 
+    // MARK: - Completion Message (fire-and-forget from PostToolUse hook)
+
+    nonisolated private func handleCompletionMessage(_ json: [String: Any]) {
+        let completion = ToolCompletion(
+            toolUseId: json["tool_use_id"] as? String ?? "",
+            sessionId: json["session_id"] as? String ?? "",
+            toolName: json["tool_name"] as? String ?? ""
+        )
+        debugLog("handleCompletionMessage: tool=\(completion.toolName) session=\(completion.sessionId.prefix(8)) tool_use_id=\(completion.toolUseId)")
+        Task { [weak self] in
+            guard let callback = await self?.getOnCompletion() else { return }
+            callback(completion)
+        }
+    }
+
     // MARK: - Debug Logging
 
     nonisolated private func debugLog(_ message: String) {
@@ -359,6 +388,14 @@ actor SocketServer {
 private final class UnsafeSendableBox<T: Sendable>: @unchecked Sendable {
     var value: T
     init(_ value: T) { self.value = value }
+}
+
+// MARK: - Tool Completion
+
+struct ToolCompletion: Sendable {
+    let toolUseId: String
+    let sessionId: String
+    let toolName: String
 }
 
 // MARK: - Errors
