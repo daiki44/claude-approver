@@ -20,6 +20,9 @@ actor SocketServer {
     /// Callback when a request is cancelled (hook script died / terminal handled it)
     var onCancel: (@Sendable (UUID) -> Void)?
 
+    /// Callback when a tool execution completes (PostToolUse hook notification)
+    var onCompletion: (@Sendable (String) -> Void)?
+
     init() {
         let supportDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/ClaudeApprover")
@@ -145,6 +148,10 @@ actor SocketServer {
         onRequest
     }
 
+    func getOnCompletion() -> (@Sendable (String) -> Void)? {
+        onCompletion
+    }
+
     // MARK: - Accept Loop (runs on GCD, NOT on actor)
 
     nonisolated private func acceptLoop(serverFD: Int32) {
@@ -177,6 +184,13 @@ actor SocketServer {
         guard let body = readExact(fd: fd, count: Int(bodyLen)),
               let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
         else { return }
+
+        // Dispatch by message type
+        let messageType = json["type"] as? String
+        if messageType == "completion" {
+            handleCompletionMessage(json)
+            return
+        }
 
         // Permission request flow: requires request_id
         guard let requestIdStr = json["request_id"] as? String,
@@ -314,6 +328,17 @@ actor SocketServer {
         }
         _ = responseData.withUnsafeBytes { ptr in
             Darwin.send(fd, ptr.baseAddress!, responseData.count, 0)
+        }
+    }
+
+    // MARK: - Completion Message (fire-and-forget from PostToolUse hook)
+
+    nonisolated private func handleCompletionMessage(_ json: [String: Any]) {
+        guard let toolUseId = json["tool_use_id"] as? String, !toolUseId.isEmpty else { return }
+        debugLog("handleCompletionMessage: tool_use_id=\(toolUseId)")
+        Task { [weak self] in
+            guard let callback = await self?.getOnCompletion() else { return }
+            callback(toolUseId)
         }
     }
 

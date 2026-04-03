@@ -15,7 +15,7 @@ Claude Code  <──(hook)──  Python script  <──(UDS)──  DecisionRes
 ```
 
 Three layers:
-1. **Claude Code** — fires `PermissionRequest` hooks
+1. **Claude Code** — fires `PermissionRequest` / `PostToolUse` hooks
 2. **Python hooks** (`hook/`) — stdin JSON → UDS → stdout JSON; exit 0 = handled, exit 1 = passthrough
 3. **Swift app** (`ClaudeApprover/`) — menu bar popover UI, `SocketServer` actor, MVVM
 
@@ -28,6 +28,7 @@ Protocol: 4-byte big-endian uint32 length header + UTF-8 JSON body
 - **Passthrough**: closing the socket without response → hook gets EOF → exit 1
 - **earlyCancelledIds**: handles race condition where cancel arrives before enqueue
 - **RequestType**: `toolPermission` (Bash, MCP, etc.), `question` (AskUserQuestion), `planApproval` (ExitPlanMode)
+- **PostToolUse completion**: ツール実行完了時にGUIの対応リクエストを削除するセーフティネット
 
 ## Agent Auto-Approve
 
@@ -85,6 +86,7 @@ ClaudeApprover/
       NotificationService.swift
 hook/
   permission_request.py   # PermissionRequest hook (timeout 300s)
+  post_tool_use.py        # PostToolUse hook (completion notification, fire-and-forget)
 scripts/
   register_hook.py        # Add hooks to ~/.claude/settings.json
   unregister_hook.py      # Remove hooks
@@ -113,6 +115,15 @@ Makefile
   "cwd": "/path/to/project",
   "received_at": "ISO8601",
   "permission_suggestions": []
+}
+```
+
+### Tool Completion (hook → app, fire-and-forget)
+
+```json
+{
+  "type": "completion",
+  "tool_use_id": "toolu_xxx"
 }
 ```
 

@@ -18,6 +18,11 @@ final class RequestQueue {
         return items.remove(at: index)
     }
 
+    func dequeueByToolUseId(_ toolUseId: String) -> PermissionRequest? {
+        guard let index = items.firstIndex(where: { $0.toolUseId == toolUseId }) else { return nil }
+        return items.remove(at: index)
+    }
+
     func clear() {
         items.removeAll()
     }

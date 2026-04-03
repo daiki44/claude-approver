@@ -15,6 +15,9 @@ SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 PERM_HOOK_COMMAND = "python3 ~/.claude/claude-approver/hook/permission_request.py"
 PERM_HOOK_TIMEOUT = 310  # 5 min socket timeout + 10s margin
 
+POST_TOOL_HOOK_COMMAND = "python3 ~/.claude/claude-approver/hook/post_tool_use.py"
+POST_TOOL_HOOK_TIMEOUT = 10  # fire-and-forget, 5s socket timeout + margin
+
 PERM_HOOK_ENTRY = {
     "matcher": ".*",
     "hooks": [
@@ -22,6 +25,17 @@ PERM_HOOK_ENTRY = {
             "type": "command",
             "command": PERM_HOOK_COMMAND,
             "timeout": PERM_HOOK_TIMEOUT,
+        }
+    ],
+}
+
+POST_TOOL_HOOK_ENTRY = {
+    "matcher": ".*",
+    "hooks": [
+        {
+            "type": "command",
+            "command": POST_TOOL_HOOK_COMMAND,
+            "timeout": POST_TOOL_HOOK_TIMEOUT,
         }
     ],
 }
@@ -73,6 +87,18 @@ def main():
         print(f"  matcher: .*")
         print(f"  command: {PERM_HOOK_COMMAND}")
         print(f"  timeout: {PERM_HOOK_TIMEOUT}s")
+
+    # Register PostToolUse hook (completion notification)
+    post_tool_use = hooks.setdefault("PostToolUse", [])
+    if _is_registered(post_tool_use, "post_tool_use.py"):
+        print("PostToolUse hook already registered. Skipping.")
+    else:
+        post_tool_use.insert(0, POST_TOOL_HOOK_ENTRY)
+        changed = True
+        print("PostToolUse hook registered.")
+        print(f"  matcher: .*")
+        print(f"  command: {POST_TOOL_HOOK_COMMAND}")
+        print(f"  timeout: {POST_TOOL_HOOK_TIMEOUT}s")
 
     if changed:
         with open(SETTINGS_PATH, "w") as f:

@@ -50,6 +50,9 @@ def main():
     # Remove from PermissionRequest
     total_removed += _clean_hook_section(hooks, "PermissionRequest", "permission_request.py")
 
+    # Remove from PostToolUse
+    total_removed += _clean_hook_section(hooks, "PostToolUse", "post_tool_use.py")
+
     # Remove from PreToolUse (legacy)
     total_removed += _clean_hook_section(hooks, "PreToolUse", "permission_request.py")
 

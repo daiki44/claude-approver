@@ -45,6 +45,16 @@ final class ApproverViewModel {
             }
         }
 
+        // Wire up the server's onCompletion callback.
+        // Fires when PostToolUse hook reports tool execution completed.
+        // Acts as a safety net: if EOF detection missed the close, this removes the stale request.
+        await server.setOnCompletion { [weak self] toolUseId in
+            let vm = self
+            Task { @MainActor in
+                vm?.handleToolCompletion(toolUseId)
+            }
+        }
+
         do {
             try await server.start()
         } catch {
@@ -121,6 +131,21 @@ final class ApproverViewModel {
             debugLog("handleCancelledRequest: early cancel id=\(requestId)")
             earlyCancelledIds.insert(requestId)
         }
+    }
+
+    /// Remove a request whose tool execution has completed (PostToolUse safety net).
+    /// Idempotent: if the request was already removed by EOF detection or user action, this is a no-op.
+    private func handleToolCompletion(_ toolUseId: String) {
+        guard let request = queue.dequeueByToolUseId(toolUseId) else {
+            debugLog("handleToolCompletion: no-op (already removed) toolUseId=\(toolUseId)")
+            return
+        }
+        debugLog("handleToolCompletion: dequeued toolUseId=\(toolUseId) id=\(request.id)")
+        notificationService.removeDelivered(requestId: request.id)
+        Task {
+            await server.cancelAndNotify(request.id)
+        }
+        updateAppDelegate()
     }
 
     // MARK: - User Actions
@@ -277,4 +302,7 @@ extension SocketServer {
         self.onCancel = handler
     }
 
+    func setOnCompletion(_ handler: @escaping @Sendable (String) -> Void) {
+        self.onCompletion = handler
+    }
 }
