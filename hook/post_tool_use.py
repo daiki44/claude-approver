@@ -44,7 +44,7 @@ def _is_agent(hook_input: dict) -> bool:
     return False
 
 
-def _send_completion(tool_use_id: str) -> None:
+def _send_completion(tool_use_id: str, session_id: str, tool_name: str) -> None:
     """Fire-and-forget で完了通知を送信。応答は不要。"""
     if not SOCKET_PATH.exists():
         _debug_log("Socket not found, skipping")
@@ -58,6 +58,8 @@ def _send_completion(tool_use_id: str) -> None:
         message = json.dumps({
             "type": "completion",
             "tool_use_id": tool_use_id,
+            "session_id": session_id,
+            "tool_name": tool_name,
         }).encode("utf-8")
 
         header = struct.pack(">I", len(message))
@@ -80,19 +82,20 @@ def main():
 
     tool_use_id = hook_input.get("tool_use_id", "")
     tool_name = hook_input.get("tool_name", "")
+    session_id = hook_input.get("session_id", "")
 
-    _debug_log(f"tool={tool_name} tool_use_id={tool_use_id}")
+    _debug_log(f"tool={tool_name} tool_use_id={tool_use_id} session_id={session_id[:8]}")
 
     # Skip agent-spawned tool uses
     if _is_agent(hook_input):
         _debug_log("  -> SKIP (agent)")
         sys.exit(0)
 
-    if not tool_use_id:
-        _debug_log("  -> SKIP (no tool_use_id)")
+    if not session_id:
+        _debug_log("  -> SKIP (no session_id)")
         sys.exit(0)
 
-    _send_completion(tool_use_id)
+    _send_completion(tool_use_id, session_id, tool_name)
     _debug_log(f"  -> SENT completion")
     sys.exit(0)
 

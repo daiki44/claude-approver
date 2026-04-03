@@ -48,10 +48,10 @@ final class ApproverViewModel {
         // Wire up the server's onCompletion callback.
         // Fires when PostToolUse hook reports tool execution completed.
         // Acts as a safety net: if EOF detection missed the close, this removes the stale request.
-        await server.setOnCompletion { [weak self] toolUseId in
+        await server.setOnCompletion { [weak self] completion in
             let vm = self
             Task { @MainActor in
-                vm?.handleToolCompletion(toolUseId)
+                vm?.handleToolCompletion(completion)
             }
         }
 
@@ -135,12 +135,28 @@ final class ApproverViewModel {
 
     /// Remove a request whose tool execution has completed (PostToolUse safety net).
     /// Idempotent: if the request was already removed by EOF detection or user action, this is a no-op.
-    private func handleToolCompletion(_ toolUseId: String) {
-        guard let request = queue.dequeueByToolUseId(toolUseId) else {
-            debugLog("handleToolCompletion: no-op (already removed) toolUseId=\(toolUseId)")
+    ///
+    /// Matching strategy:
+    /// 1. Try exact match by toolUseId (if PermissionRequest included it)
+    /// 2. Fallback: match by sessionId + toolName (oldest first)
+    private func handleToolCompletion(_ completion: ToolCompletion) {
+        // Try exact match by toolUseId first
+        var request: PermissionRequest?
+        if !completion.toolUseId.isEmpty {
+            request = queue.dequeueByToolUseId(completion.toolUseId)
+        }
+        // Fallback: match by sessionId + toolName (oldest = first in queue)
+        if request == nil, !completion.sessionId.isEmpty {
+            request = queue.dequeueBySessionAndTool(
+                sessionId: completion.sessionId,
+                toolName: completion.toolName
+            )
+        }
+        guard let request else {
+            debugLog("handleToolCompletion: no-op (already removed) tool=\(completion.toolName) session=\(completion.sessionId.prefix(8))")
             return
         }
-        debugLog("handleToolCompletion: dequeued toolUseId=\(toolUseId) id=\(request.id)")
+        debugLog("handleToolCompletion: dequeued id=\(request.id) tool=\(completion.toolName) session=\(completion.sessionId.prefix(8))")
         notificationService.removeDelivered(requestId: request.id)
         Task {
             await server.cancelAndNotify(request.id)
@@ -302,7 +318,7 @@ extension SocketServer {
         self.onCancel = handler
     }
 
-    func setOnCompletion(_ handler: @escaping @Sendable (String) -> Void) {
+    func setOnCompletion(_ handler: @escaping @Sendable (ToolCompletion) -> Void) {
         self.onCompletion = handler
     }
 }

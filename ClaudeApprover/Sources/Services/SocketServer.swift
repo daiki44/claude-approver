@@ -21,7 +21,7 @@ actor SocketServer {
     var onCancel: (@Sendable (UUID) -> Void)?
 
     /// Callback when a tool execution completes (PostToolUse hook notification)
-    var onCompletion: (@Sendable (String) -> Void)?
+    var onCompletion: (@Sendable (ToolCompletion) -> Void)?
 
     init() {
         let supportDir = FileManager.default.homeDirectoryForCurrentUser
@@ -148,7 +148,7 @@ actor SocketServer {
         onRequest
     }
 
-    func getOnCompletion() -> (@Sendable (String) -> Void)? {
+    func getOnCompletion() -> (@Sendable (ToolCompletion) -> Void)? {
         onCompletion
     }
 
@@ -334,11 +334,15 @@ actor SocketServer {
     // MARK: - Completion Message (fire-and-forget from PostToolUse hook)
 
     nonisolated private func handleCompletionMessage(_ json: [String: Any]) {
-        guard let toolUseId = json["tool_use_id"] as? String, !toolUseId.isEmpty else { return }
-        debugLog("handleCompletionMessage: tool_use_id=\(toolUseId)")
+        let completion = ToolCompletion(
+            toolUseId: json["tool_use_id"] as? String ?? "",
+            sessionId: json["session_id"] as? String ?? "",
+            toolName: json["tool_name"] as? String ?? ""
+        )
+        debugLog("handleCompletionMessage: tool=\(completion.toolName) session=\(completion.sessionId.prefix(8)) tool_use_id=\(completion.toolUseId)")
         Task { [weak self] in
             guard let callback = await self?.getOnCompletion() else { return }
-            callback(toolUseId)
+            callback(completion)
         }
     }
 
@@ -384,6 +388,14 @@ actor SocketServer {
 private final class UnsafeSendableBox<T: Sendable>: @unchecked Sendable {
     var value: T
     init(_ value: T) { self.value = value }
+}
+
+// MARK: - Tool Completion
+
+struct ToolCompletion: Sendable {
+    let toolUseId: String
+    let sessionId: String
+    let toolName: String
 }
 
 // MARK: - Errors

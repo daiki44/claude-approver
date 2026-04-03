@@ -23,6 +23,15 @@ final class RequestQueue {
         return items.remove(at: index)
     }
 
+    /// Find and remove the oldest request matching sessionId and toolName.
+    /// Used as fallback when tool_use_id is not available in PermissionRequest.
+    func dequeueBySessionAndTool(sessionId: String, toolName: String) -> PermissionRequest? {
+        guard let index = items.firstIndex(where: {
+            $0.sessionId == sessionId && $0.toolName == toolName
+        }) else { return nil }
+        return items.remove(at: index)
+    }
+
     func clear() {
         items.removeAll()
     }
