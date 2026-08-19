@@ -1,15 +1,18 @@
 # Codex CLI integration
 
-ClaudeApprover can receive approval requests from Codex CLI and show them in the same macOS menu bar popover used by Claude Code.
+Agent Approver can receive approval requests from Codex CLI and show them in the same macOS menu bar popover used by other supported harnesses.
 
 The integration uses Codex's `PermissionRequest` command hook. Codex sends one JSON object on stdin; the hook forwards it to the app over the existing Unix Domain Socket and returns the app's allow/deny decision to Codex.
 
-For the official hook contract, see the [OpenAI Docs Hooks reference](https://learn.chatgpt.com/docs/hooks).
+Official references:
+
+- [Codex CLI](https://developers.openai.com/codex/cli)
+- [OpenAI Docs Hooks reference](https://learn.chatgpt.com/docs/hooks)
 
 ## Requirements
 
 - macOS 14.0+
-- A running ClaudeApprover app
+- A running Agent Approver app
 - Python 3
 - Codex CLI with hooks enabled
 
@@ -20,7 +23,7 @@ The app does not need to be rebuilt for each Codex session. The LaunchAgent inst
 From the repository checkout:
 
 ```bash
-cd ~/.claude/claude-approver
+cd /path/to/agent-approver
 python3 scripts/register_codex_hook.py
 ```
 
@@ -29,7 +32,7 @@ The registration script:
 1. Creates or updates `$CODEX_HOME/hooks.json` (`~/.codex/hooks.json` by default).
 2. Preserves existing Codex hooks.
 3. Adds an idempotent `PermissionRequest` hook for the app's absolute local path.
-4. Uses a 310-second hook timeout. The adapter itself closes after 295 seconds, just before the app's 300-second Claude fallback, so Codex can return to its native prompt instead of racing a deny response.
+4. Uses a 310-second hook timeout. The adapter itself closes after 295 seconds, just before the app's 300-second internal fallback, so Codex can return to its native prompt instead of racing a deny response.
 
 After registration, open Codex and run `/hooks`. Review and trust the new command hook. Codex requires non-managed command hooks to be reviewed before they run.
 
