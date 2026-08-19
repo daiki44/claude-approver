@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ClaudeApprover!
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/daiki44/claude-approver.git ~/.claude/claude-approver
+   git clone https://github.com/daiki44/agent-approver.git ~/.claude/claude-approver
    cd ~/.claude/claude-approver
    ```
 
