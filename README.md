@@ -1,8 +1,8 @@
 # ClaudeApprover
 
-> **Disclaimer:** This is an unofficial, community-built tool. It is not affiliated with, endorsed by, or sponsored by Anthropic, PBC. "Claude" is a trademark of Anthropic, PBC.
+> **Disclaimer:** This is an unofficial, community-built tool. It is not affiliated with, endorsed by, or sponsored by Anthropic, PBC or OpenAI. "Claude" is a trademark of Anthropic, PBC.
 
-A macOS menu bar app that replaces Claude Code's terminal permission dialogs with a native SwiftUI popover. Instead of switching to your terminal every time Claude Code needs approval, you get a clean GUI right from the menu bar.
+A macOS menu bar app that replaces Claude Code and Codex CLI terminal permission dialogs with a native SwiftUI popover. Instead of switching to your terminal every time an agent needs approval, you get a clean GUI right from the menu bar.
 
 <p align="center">
   <img src="docs/screenshots/questions-and-plans.png" width="360" alt="Questions and plan approvals" />
@@ -11,20 +11,20 @@ A macOS menu bar app that replaces Claude Code's terminal permission dialogs wit
 ## How It Works
 
 ```
-Claude Code  ──(hook)──>  Python script  ──(UDS)──>  Swift menu bar app
+Claude Code / Codex CLI  ──(hook)──>  Python script  ──(UDS)──>  Swift menu bar app
                                                           │
                                                      User decides
                                                      Allow / Deny
                                                           │
-Claude Code  <──(hook)──  Python script  <──(UDS)──  DecisionResponse
+Claude Code / Codex CLI  <──(hook)──  Python script  <──(UDS)──  DecisionResponse
 ```
 
-1. Claude Code fires a `PermissionRequest` hook when it needs tool approval
+1. Claude Code or Codex CLI fires a `PermissionRequest` hook when it needs tool approval
 2. A Python hook script reads the request from stdin and forwards it over a Unix Domain Socket
 3. The SwiftUI menu bar app displays the request in a popover
 4. You approve or deny; the response flows back through the same path
 
-**Fail-open design** — if the app isn't running or anything goes wrong, the hook exits with code 1 and Claude Code falls back to its normal terminal dialog. You never get stuck.
+**Fail-open design** — if the app isn't running or anything goes wrong, Claude Code falls back to its normal terminal dialog and the Codex adapter returns no decision so Codex can show its normal approval prompt. You never get stuck.
 
 ## Features
 
@@ -36,6 +36,7 @@ Claude Code  <──(hook)──  Python script  <──(UDS)──  DecisionRes
 - **macOS notifications** — get notified even when focused on other apps
 - **Auto-open/close** — popover opens on new requests and closes when the queue is empty
 - **Keyboard shortcuts** — approve, deny, and navigate without touching the mouse
+- **Codex CLI support** — route Codex `PermissionRequest` approvals through the same popover; see [Codex CLI integration](docs/codex-integration.md)
 
 ## Keyboard Shortcuts
 
@@ -52,7 +53,8 @@ Claude Code  <──(hook)──  Python script  <──(UDS)──  DecisionRes
 - macOS 14.0+
 - Swift 5.9+ (Xcode 15+ or standalone Swift toolchain)
 - Python 3 (ships with macOS)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI (optional)
+- [Codex CLI](https://developers.openai.com/codex/cli) (optional)
 
 ## Installation
 
@@ -72,6 +74,14 @@ This will:
 4. Install and start a LaunchAgent for auto-launch at login
 
 **Restart Claude Code** for the hook to take effect.
+
+To also enable Codex CLI approvals:
+
+```bash
+python3 scripts/register_codex_hook.py
+```
+
+Then open Codex, run `/hooks`, and review/trust the ClaudeApprover command hook. See [Codex CLI integration](docs/codex-integration.md) for details.
 
 ## Makefile Targets
 
@@ -117,9 +127,13 @@ ClaudeApprover/
 
 hook/
   permission_request.py            # PermissionRequest hook (stdin → UDS → stdout)
+  codex_permission_request.py      # Codex PermissionRequest adapter (fail-open)
+  socket_bridge.py                 # Shared length-prefixed UDS transport
 scripts/
   register_hook.py                 # Add hooks to ~/.claude/settings.json
-  unregister_hook.py               # Remove hooks
+  unregister_hook.py               # Remove Claude Code hooks
+  register_codex_hook.py           # Add hooks to ~/.codex/hooks.json
+  unregister_codex_hook.py         # Remove the Codex hook
   Info.plist                       # App bundle metadata
   launchagent.plist.template       # LaunchAgent template (paths filled at install)
 ```
@@ -138,15 +152,19 @@ Communication uses a Unix Domain Socket at:
 ```json
 {
   "request_id": "uuid",
+  "source": "codex",
   "tool_name": "Bash",
   "tool_input": { "command": "ls -la" },
   "tool_use_id": "toolu_xxx",
+  "turn_id": "turn-id",
   "session_id": "session-id",
   "cwd": "/path/to/project",
   "received_at": "2025-01-01T00:00:00+00:00",
   "permission_suggestions": []
 }
 ```
+
+For Codex-specific setup, hook trust behavior, and troubleshooting, see [docs/codex-integration.md](docs/codex-integration.md).
 
 ### Decision Response (app → hook)
 
@@ -178,8 +196,9 @@ export CLAUDE_APPROVER_DEBUG=1
 
 **App not receiving requests:**
 - Verify the hook is registered: check `~/.claude/settings.json` for `PermissionRequest` hooks
+- For Codex, check `~/.codex/hooks.json` and run `/hooks` to review/trust the command hook
 - Verify the socket file exists: `ls ~/Library/Application\ Support/ClaudeApprover/claude-approver.sock`
-- Restart Claude Code after hook registration
+- Restart Claude Code or Codex after hook registration
 
 **Popover not appearing:**
 - Check if the app is running: look for the shield icon in the menu bar
@@ -192,7 +211,7 @@ export CLAUDE_APPROVER_DEBUG=1
 - **No external dependencies** — Apple frameworks only
 - **actor isolation** — `SocketServer` uses Swift `actor` for thread-safe state; blocking I/O runs on GCD threads
 - **@Observable** — uses Observation framework, not Combine
-- **Fail-open everywhere** — hook errors always fall through to Claude Code's normal dialog
+- **Fail-open everywhere** — hook errors always fall through to the originating client's normal approval flow
 
 ## License
 

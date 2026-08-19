@@ -15,20 +15,21 @@ Exit codes:
 
 import json
 import os
-import socket
-import struct
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tty_resolver import resolve_tty
+try:
+    from .socket_bridge import send_request
+    from .tty_resolver import resolve_tty
+except ImportError:  # Executed directly by Claude Code as a command hook.
+    from socket_bridge import send_request
+    from tty_resolver import resolve_tty
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-SOCKET_DIR = Path.home() / "Library" / "Application Support" / "ClaudeApprover"
-SOCKET_PATH = SOCKET_DIR / "claude-approver.sock"
 TIMEOUT_SECONDS = 300  # 5 minutes
 LOG_PATH = Path.home() / ".claude" / "approver_debug.log"
 
@@ -56,57 +57,8 @@ def _is_agent(hook_input: dict) -> bool:
 
 
 def _send_request(request: dict) -> dict | None:
-    """
-    Unix Socket 経由で ClaudeApprover.app にリクエストを送信し、
-    応答を受信する。App 未起動時は None を返す。
-
-    フレーミング: 4バイト big-endian uint32 長さヘッダー + UTF-8 JSON ボディ
-    """
-    if not SOCKET_PATH.exists():
-        return None
-
-    try:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(TIMEOUT_SECONDS)
-        sock.connect(str(SOCKET_PATH))
-
-        # Send: length-prefixed JSON
-        body = json.dumps(request).encode("utf-8")
-        header = struct.pack("!I", len(body))
-        sock.sendall(header + body)
-
-        # Receive: length-prefixed JSON
-        raw_header = _recv_exact(sock, 4)
-        if raw_header is None:
-            return None
-        (resp_len,) = struct.unpack("!I", raw_header)
-        raw_body = _recv_exact(sock, resp_len)
-        if raw_body is None:
-            return None
-
-        return json.loads(raw_body.decode("utf-8"))
-    except (ConnectionRefusedError, FileNotFoundError, OSError):
-        # App not running or socket gone
-        return None
-    except socket.timeout:
-        # Timeout -> passthrough (fail-open: let terminal handle it)
-        return None
-    finally:
-        try:
-            sock.close()
-        except Exception:
-            pass
-
-
-def _recv_exact(sock: socket.socket, n: int) -> bytes | None:
-    """Receive exactly n bytes from socket."""
-    data = b""
-    while len(data) < n:
-        chunk = sock.recv(n - len(data))
-        if not chunk:
-            return None
-        data += chunk
-    return data
+    """Send a request through the shared length-prefixed UDS transport."""
+    return send_request(request, timeout_seconds=TIMEOUT_SECONDS)
 
 
 def main():
